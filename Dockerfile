@@ -20,16 +20,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Install Playwright browsers and their OS dependencies
 RUN playwright install --with-deps chromium
 
-COPY .env /app/.env
-
-COPY ./scraper_assistant /app/scraper_assistant
-
-# Copy your application code (the 'app' package) into the image
-COPY ./app ./app
-
-# Copy your frontend static files into the image
-# This creates a 'static_frontend' directory inside '/app' in the container
-COPY ./frontend ./static_frontend 
+# Copy the entire application context into the image
+# The .dockerignore file will exclude unnecessary files
+COPY . .
+# The frontend static files need to be accessible from a known path.
+# We will rename the 'frontend' directory to 'static_frontend' to match the original setup.
+RUN if [ -d frontend ]; then mv frontend static_frontend; fi
 
 # Expose the port your API will run on
 EXPOSE 8000

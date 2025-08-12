@@ -128,18 +128,23 @@ async def scrape_urls(
     ]
 
     actual_extension_path = None
-    if path_to_extension_folder:
-        if not os.path.isdir(path_to_extension_folder):
-            logger.error(f"Extension path not found or not a directory: {path_to_extension_folder}. Proceeding without extension.")
+    if path_to_extension_folder and os.path.isdir(path_to_extension_folder):
+        # Also check if it's a valid extension by looking for the manifest
+        manifest_path = os.path.join(path_to_extension_folder, 'manifest.json')
+        if not os.path.isfile(manifest_path):
+            logger.warning(f"Extension directory found at '{path_to_extension_folder}', but it's missing a 'manifest.json'. Proceeding without extension.")
         else:
             actual_extension_path = os.path.abspath(path_to_extension_folder)
             browser_launch_args.extend([
                 f"--disable-extensions-except={actual_extension_path}",
                 f"--load-extension={actual_extension_path}",
             ])
-            logger.info(f"Attempting to load extension from: {actual_extension_path}")
+            logger.info(f"Confirmed valid extension, attempting to load from: {actual_extension_path}")
     else:
-        logger.info("No extension path provided. Running browser without custom extensions.")
+        if path_to_extension_folder:
+             logger.warning(f"Extension path '{path_to_extension_folder}' not found or not a directory. Proceeding without extension.")
+        else:
+            logger.info("No extension path provided. Running browser without custom extensions.")
 
     user_data_dir = tempfile.mkdtemp() 
     logger.info(f"Using temporary user data directory for Playwright: {user_data_dir}")
