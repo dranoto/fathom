@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+langchain
+langchain-google-genai
+langchain-community # For document_loaders like PlaywrightURLLoader
+feedparser
+playwright
+sqlalchemy
+apscheduler
+unstructured
+bleach
+beautifulsoup4
+readability-lxml

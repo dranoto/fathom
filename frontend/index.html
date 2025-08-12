@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI News Today</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/layout.css">
+    <link rel="stylesheet" href="/static/css/header.css">
+    <link rel="stylesheet" href="/static/css/navigation.css">
+    <link rel="stylesheet" href="/static/css/search.css">
+    <link rel="stylesheet" href="/static/css/loading.css">
+    <link rel="stylesheet" href="/static/css/article_card.css">
+    <link rel="stylesheet" href="/static/css/forms.css">
+    <link rel="stylesheet" href="/static/css/modals.css">
+    <link rel="stylesheet" href="/static/css/setup_page.css">
+    <link rel="stylesheet" href="/static/css/footer.css">
+    <link rel="stylesheet" href="/static/css/responsive.css"> 
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
+</head>
+<body>
+    <div class="page-container">
+        <header>
+            <div class="container">
+                <h1>AI News Today</h1>
+                <p class="tagline">Your Curated Digest with AI-Powered Tags & Chat</p>
+            </div>
+        </header>
+
+        <nav class="main-nav container">
+            <button id="nav-main-btn" class="nav-button active">Main Feed</button>
+            <button id="nav-setup-btn" class="nav-button">Setup</button>
+            <button id="refresh-news-btn" class="nav-button refresh-button">Manually Refresh Feeds</button>
+        </nav>
+
+        <div class="search-container container">
+            <input type="search" id="keyword-search-input" placeholder="Search articles by keyword...">
+            <button id="keyword-search-btn" class="nav-button">Search</button>
+        </div>
+
+        <div id="feed-filter-controls" class="container feed-filters">
+            </div>
+        <div id="active-tag-filters-display" class="container tag-filters-display" style="display: none; margin-bottom: 15px;">
+            </div>
+
+
+        <main class="container">
+            <section id="main-feed-section" class="content-section active">
+                <h2>Latest Summaries</h2>
+                <div id="loading-indicator" class="loading" style="display: none;"> <div class="spinner"></div>
+                    <span id="loading-text">Fetching and summarizing news...</span>
+                </div>
+
+                <div id="results-container" class="results-grid">
+                    </div>
+                <div id="infinite-scroll-loading-indicator" class="loading" style="display: none;">
+                    <div class="spinner"></div>
+                    <span>Loading more articles...</span>
+                </div>
+            </section>
+
+            <section id="setup-section" class="content-section">
+                <h2>Setup & Preferences</h2>
+                <div class="setup-block">
+                    <h3>Content Preferences</h3>
+                    <form id="content-prefs-form">
+                        <div class="form-group">
+                            <label for="num_articles_setup">Articles per Page:</label>
+                            <input type="number" id="num_articles_setup" name="num_articles_setup" value="6" min="1" max="20" required>
+                        </div>
+                        <button type="submit" class="submit-button">Save Page Size</button>
+                    </form>
+                    <p>Current articles per page: <span id="current-num-articles-display">6</span></p>
+                </div>
+                
+                <div class="setup-block">
+                    <h3>Global RSS Feed Settings</h3>
+                    <form id="global-rss-settings-form">
+                        <div class="form-group">
+                            <label for="rss-fetch-interval-input">Default Fetch Interval (minutes):</label>
+                            <input type="number" id="rss-fetch-interval-input" value="60" min="5" max="1440" required>
+                             <small>This is a frontend preference for new feeds. Backend scheduler interval is set on the server.</small>
+                        </div>
+                        <button type="submit" class="submit-button">Save Interval</button>
+                    </form>
+                    <p>Current default fetch interval: <span id="current-rss-fetch-interval-display">60</span> minutes.</p>
+                </div>
+
+                <div class="setup-block">
+                    <h3>Manage RSS Feed URLs</h3>
+                    <form id="add-rss-feed-form">
+                        <div class="form-group">
+                            <label for="rss-feed-url-input">New RSS Feed URL:</label>
+                            <input type="url" id="rss-feed-url-input" placeholder="e.g., https://www.example.com/feed.xml" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="rss-feed-name-input">Feed Name (Optional):</label>
+                            <input type="text" id="rss-feed-name-input" placeholder="e.g., Example News">
+                        </div>
+                        <div class="form-group">
+                            <label for="rss-feed-interval-input">Fetch Interval for this feed (minutes, optional):</label>
+                            <input type="number" id="rss-feed-interval-input" min="5" placeholder="Default: 60">
+                        </div>
+                        <button type="submit" class="submit-button">Add Feed</button>
+                    </form>
+                    <h4>Current RSS Feeds in Database:</h4>
+                    <ul id="rss-feeds-list"></ul>
+                </div>
+
+                <div class="setup-block">
+                    <h3>AI Prompt Configuration</h3>
+                    <form id="ai-prompts-form">
+                        <div class="form-group">
+                            <label for="summary-prompt-input">Summary Prompt:</label>
+                            <textarea id="summary-prompt-input" rows="4" placeholder="Enter your custom summary prompt..."></textarea>
+                            <small>Default will be used if empty. Must contain {text}.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="tag-generation-prompt-input">Tag Generation Prompt:</label>
+                            <textarea id="tag-generation-prompt-input" rows="4" placeholder="Enter your custom tag generation prompt..."></textarea>
+                            <small>Default will be used if empty. Must contain {text}.</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="chat-prompt-input">Chat Prompt:</label>
+                            <textarea id="chat-prompt-input" rows="4" placeholder="Enter your custom chat prompt..."></textarea>
+                             <small>Default will be used if empty. Expected: {article_text}, {question}.</small>
+                        </div>
+                        <button type="submit" class="submit-button">Save Prompts</button>
+                        <button type="button" id="reset-prompts-btn" class="action-button" style="margin-left: 10px;">Reset to Defaults</button>
+                    </form>
+                    <h4>Current Prompts:</h4>
+                    <p><strong>Summary:</strong></p><pre id="current-summary-prompt-display" class="prompt-preview"></pre>
+                    <p><strong>Tag Gen:</strong></p><pre id="current-tag-generation-prompt-display" class="prompt-preview"></pre>
+                    <p><strong>Chat:</strong></p><pre id="current-chat-prompt-display" class="prompt-preview"></pre>
+                </div>
+
+                <div class="setup-block">
+                    <h3>AI Model Configuration</h3>
+                    <form id="ai-models-form">
+                        <div class="form-group">
+                            <label for="summary-model-select">Summary Model:</label>
+                            <select id="summary-model-select" name="summary-model-select"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="chat-model-select">Chat Model:</label>
+                            <select id="chat-model-select" name="chat-model-select"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="tag-model-select">Tag Generation Model:</label>
+                            <select id="tag-model-select" name="tag-model-select"></select>
+                        </div>
+                        <button type="submit" class="submit-button">Save Models</button>
+                    </form>
+                </div>
+
+                 <div class="setup-block">
+                    <h3>API Endpoints (Advanced)</h3>
+                    <form id="api-endpoint-form">
+                        <div class="form-group">
+                            <label for="api-url">API URL for Summaries:</label>
+                            <input type="text" id="api-url" value="/api/get-news-summaries">
+                        </div>
+                         <div class="form-group">
+                            <label for="chat-api-url">API URL for Chat:</label>
+                            <input type="text" id="chat-api-url" value="/api/chat-with-article">
+                        </div>
+                        <button type="submit" class="submit-button">Set API URLs</button>
+                    </form>
+                    <p>Current Summaries URL: <span id="current-api-url-display">/api/get-news-summaries</span></p>
+                    <p>Current Chat URL: <span id="current-chat-api-url-display">/api/chat-with-article</span></p>
+                </div>
+
+                <div class="setup-block">
+                    <h3>Data Management</h3>
+                    <div class="form-group">
+                        <label for="days-old-input">Delete articles older than (days):</label>
+                        <input type="number" id="days-old-input" value="30" min="1" max="3650" style="max-width: 100px;">
+                        <button type="button" id="delete-old-data-btn" class="action-button clear-all" style="margin-left:10px;">Delete Old Data</button>
+                    </div>
+                    <p id="delete-status-message" style="margin-top:10px;"></p>
+                </div>
+            </section>
+        </main>
+        <footer>
+            <div class="container">
+                <p>&copy; 2025 AI News Today. All summaries and tags generated by AI.</p>
+            </div>
+        </footer>
+    </div> <div id="regenerate-summary-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <span class="close-button" id="close-regenerate-modal-btn">&times;</span>
+            <h3>Regenerate Summary</h3>
+            <p>Edit the prompt below or use the current default. {text} will be replaced.</p>
+            <form id="regenerate-prompt-form">
+                <div class="form-group">
+                    <label for="modal-summary-prompt-input">Summary Prompt:</label>
+                    <textarea id="modal-summary-prompt-input" rows="5"></textarea>
+                </div>
+                <input type="hidden" id="modal-article-id-input">
+                <button type="submit" class="submit-button">Regenerate</button>
+                <button type="button" id="modal-use-default-prompt-btn" class="action-button" style="margin-left: 10px;">Use Default Prompt</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="article-chat-modal" class="modal chat-modal-container" style="display:none;">
+        <div class="modal-content chat-modal-content">
+            <span class="close-button" id="close-article-chat-modal-btn">&times;</span>
+            <h3>Chat About Article</h3>
+            <div class="chat-modal-body">
+                <div class="chat-modal-article-preview" id="chat-modal-article-preview-content"></div>
+                <div class="chat-modal-chat-interface">
+                    <div id="chat-modal-history" class="chat-response"></div>
+                    <div class="chat-input-group">
+                        <input type="text" id="chat-modal-question-input" class="chat-question-input" placeholder="Your question...">
+                        <button id="chat-modal-ask-button" class="chat-ask-button">Ask</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="full-article-modal" class="modal full-article-modal-container" style="display:none;">
+        <div class="modal-content full-article-modal-content">
+            <span class="close-button" id="close-full-article-modal-btn">&times;</span>
+            <h3 id="full-article-modal-title">Full Article</h3>
+            <div id="full-article-modal-body" class="article-content-display">
+                <p class="loading-text-modal">Loading full article content...</p>
+            </div>
+            <div class="full-article-modal-footer">
+                <a href="#" id="full-article-modal-original-link" class="button-like-link" target="_blank" rel="noopener noreferrer">View Original on Publisher's Site</a>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/static/script.js"></script>
+</body>
+</html>
