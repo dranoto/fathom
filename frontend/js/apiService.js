@@ -87,6 +87,10 @@ export async function triggerRssRefresh() {
     });
 }
 
+export async function fetchRefreshStatus() {
+    return handleFetch('/api/feeds/refresh-status');
+}
+
 export async function regenerateSummary(articleId, payload) {
     return handleFetch(`${CHAT_API_ENDPOINT_BASE}/articles/${articleId}/regenerate-summary`, {
         method: 'POST',

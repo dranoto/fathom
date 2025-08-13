@@ -13,6 +13,13 @@ logger = logging.getLogger(__name__)
 # if multiple triggers (e.g., scheduler, manual trigger) happen close together.
 rss_update_lock = asyncio.Lock()
 
+def is_rss_update_locked():
+    """
+    Checks if the RSS update lock is currently held.
+    Returns True if the lock is held, False otherwise.
+    """
+    return rss_update_lock.locked()
+
 async def trigger_rss_update_all_feeds():
     """
     Asynchronously triggers the update of all subscribed RSS feeds.
