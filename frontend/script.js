@@ -251,12 +251,15 @@ function handleAllFeedsClick() {
 
 async function handleFavoriteClick(articleId, favoriteButtonElement) {
     console.log(`MainScript: Favorite clicked for Article ID: ${articleId}`);
+    const wasFavorite = favoriteButtonElement.classList.contains('is-favorite');
+
+    // Optimistically update the UI
+    favoriteButtonElement.classList.toggle('is-favorite');
+
     try {
-        // Optimistically update the UI
-        favoriteButtonElement.classList.toggle('is-favorite');
         const updatedArticle = await apiService.toggleFavoriteStatus(articleId);
         console.log("MainScript: Favorite status updated via API:", updatedArticle.is_favorite);
-        // Ensure UI is consistent with the response
+        // Ensure UI is consistent with the response from the source of truth (the API)
         if (updatedArticle.is_favorite) {
             favoriteButtonElement.classList.add('is-favorite');
         } else {
@@ -264,8 +267,12 @@ async function handleFavoriteClick(articleId, favoriteButtonElement) {
         }
     } catch (error) {
         console.error("MainScript: Error toggling favorite status:", error);
-        // Revert the UI change on error
-        favoriteButtonElement.classList.toggle('is-favorite');
+        // On error, explicitly revert to the original state.
+        if (wasFavorite) {
+            favoriteButtonElement.classList.add('is-favorite');
+        } else {
+            favoriteButtonElement.classList.remove('is-favorite');
+        }
         alert(`Failed to update favorite status: ${error.message}`);
     }
 }
