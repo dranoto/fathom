@@ -55,8 +55,7 @@ async def get_news_summaries_endpoint(
     llm_summary: GoogleGenerativeAI = Depends(get_llm_summary), llm_tag: GoogleGenerativeAI = Depends(get_llm_tag)
 ):
     if not llm_summary and not llm_tag:
-        logger.error("API Error: Summarization or Tagging LLM not available via DI in get_news_summaries_endpoint.")
-        raise HTTPException(status_code=503, detail="Core AI services (Summarization/Tagging LLM) unavailable via DI.")
+        logger.warning("API Warning: Summarization or Tagging LLM not available in get_news_summaries_endpoint. AI features will be disabled for this request.")
     logger.info(f"API Call: Get news summaries. Query: {query.model_dump_json(indent=2)}")
     db_query = db.query(database.Article)
     search_source_display_parts = []
@@ -89,6 +88,7 @@ async def get_news_summaries_endpoint(
             "id": article_db_obj.id, "title": article_db_obj.title, "url": article_db_obj.url,
             "publisher": article_db_obj.feed_source.name if article_db_obj.feed_source else article_db_obj.publisher_name,
             "published_date": article_db_obj.published_date,
+            "rss_description": article_db_obj.rss_description,
             "created_at": article_db_obj.created_at,
             "source_feed_url": article_db_obj.feed_source.url if article_db_obj.feed_source else None,
             "summary": None, "tags": [ArticleTagResponse.from_orm(tag) for tag in article_db_obj.tags],
@@ -111,11 +111,6 @@ async def get_news_summaries_endpoint(
 
         can_process_ai = current_text_content and not current_text_content.startswith(SCRAPING_ERROR_PREFIX) and len(current_text_content) >= TEXT_LENGTH_THRESHOLD
         article_result_data["is_summarizable"] = can_process_ai
-
-        if not article_result_data["summary"] and (not current_text_content or not current_text_content.startswith(SCRAPING_ERROR_PREFIX)):
-             if not latest_summary_obj or latest_summary_obj.summary_text.startswith("Error:"):
-                if current_text_content and len(current_text_content) > 10:
-                     article_result_data["content_snippet"] = current_text_content[:300] + '...'
 
         if not article_db_obj.tags and (not current_text_content or not current_text_content.startswith(SCRAPING_ERROR_PREFIX)):
              error_parts_for_display.append("Tags need generation.")

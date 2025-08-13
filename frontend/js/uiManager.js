@@ -210,10 +210,10 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         if (article.summary) {
             summaryContainer.innerHTML = typeof marked !== 'undefined' ? marked.parse(article.summary) : article.summary;
         } else {
-            const snippetP = document.createElement('p');
-            snippetP.classList.add('content-snippet');
-            snippetP.textContent = article.content_snippet || "No summary or snippet available.";
-            summaryContainer.appendChild(snippetP);
+            const descriptionP = document.createElement('p');
+            descriptionP.classList.add('content-snippet'); // Re-using class for styling
+            descriptionP.textContent = article.rss_description || "No summary or description available.";
+            summaryContainer.appendChild(descriptionP);
 
             const summarizeBtn = document.createElement('button');
             summarizeBtn.textContent = 'Summarize with AI';

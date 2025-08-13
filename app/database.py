@@ -99,6 +99,9 @@ class Article(Base):
     publisher_name = Column(String, nullable=True)
     published_date = Column(DateTime(timezone=True), nullable=True, index=True)
 
+    # NEW: To store the plain-text description from the RSS feed entry.
+    rss_description = Column(Text, nullable=True)
+
     # This field will store the primary textual content, often extracted as innerText or a cleaned version.
     scraped_text_content = Column(Text, nullable=True)
     
