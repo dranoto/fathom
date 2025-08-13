@@ -116,7 +116,7 @@ async def startup_event():
                         app.state.available_models.insert(0, model_name)
                         logger.warning(f"MAIN_API: Saved model '{model_name}' not found in fetched list; adding it to the top to ensure availability.")
 
-            except Exception as e:
+            except google.api_core.exceptions.GoogleAPICallError as e:
                 logger.error(f"MAIN_API: Failed to fetch models from Google AI: {e}. Falling back to a default list.")
                 # Fallback to a default list in case of API failure
                 app.state.available_models = [
