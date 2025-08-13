@@ -178,14 +178,27 @@ async def fetch_and_store_articles_from_feed(db: Session, feed_source: RSSFeedSo
             continue
 
         # NEW: Extract and clean RSS description to plain text
-        raw_description = feed_entry_data.get('description', feed_entry_data.get('summary'))
+        # Prioritize 'summary' as it's often cleaner, then 'description'.
+        raw_description = feed_entry_data.get('summary', feed_entry_data.get('description'))
+
+        # Fallback to the 'content' field if summary/description are missing.
+        # feedparser can return 'content' as a list of content objects.
+        if not raw_description and 'content' in feed_entry_data:
+            if isinstance(feed_entry_data['content'], list) and len(feed_entry_data['content']) > 0:
+                # The content object typically has a 'value' attribute.
+                content_block = feed_entry_data['content'][0]
+                if hasattr(content_block, 'value'):
+                    raw_description = content_block.value
+
         plain_text_description = None
         if raw_description:
             try:
+                # Use BeautifulSoup to strip any HTML tags and get plain text.
                 soup = BeautifulSoup(raw_description, "html.parser")
                 plain_text_description = soup.get_text(separator=' ', strip=True)
             except Exception as e:
                 logger.warning(f"RSS_CLIENT: Could not parse description HTML for {article_url}. Storing raw. Error: {e}")
+                # As a fallback, use the raw description if parsing fails.
                 plain_text_description = raw_description
 
         # Prepare content for DB

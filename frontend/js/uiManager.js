@@ -139,6 +139,11 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
     }
 
     articles.forEach((article) => {
+        // If the article is not summarizable (i.e., has no meaningful content), skip creating its card.
+        if (!article.is_summarizable) {
+            console.log(`UIManager: Skipping article ID ${article.id} ('${article.title}') because it is not summarizable.`);
+            return; // Skip this iteration
+        }
         const articleCard = document.createElement('div');
         articleCard.classList.add('article-card');
         articleCard.setAttribute('id', `article-db-${article.id}`);

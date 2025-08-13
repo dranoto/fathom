@@ -126,8 +126,6 @@ async def get_news_summaries_endpoint(
         can_process_ai = current_text_content and not current_text_content.startswith(SCRAPING_ERROR_PREFIX) and len(current_text_content) >= TEXT_LENGTH_THRESHOLD
         article_result_data["is_summarizable"] = can_process_ai
 
-        if not article_db_obj.tags and (not current_text_content or not current_text_content.startswith(SCRAPING_ERROR_PREFIX)):
-             error_parts_for_display.append("Tags need generation.")
         if error_parts_for_display:
             article_result_data["error_message"] = " | ".join(list(set(error_parts_for_display)))
         results_on_page.append(ArticleResult(**article_result_data))
@@ -168,8 +166,6 @@ async def get_news_summaries_endpoint(
                     if not res_art.summary:
                          latest_s = db.query(database.Summary).filter(database.Summary.article_id == res_art.id).order_by(database.Summary.created_at.desc()).first()
                          if not latest_s or latest_s.summary_text.startswith("Error:"): current_error_parts_after_od_scrape.append("Summary needs generation.")
-                    if not art_db_obj_to_process.tags:
-                         current_error_parts_after_od_scrape.append("Tags need generation.")
                     res_art.error_message = " | ".join(list(set(current_error_parts_after_od_scrape))) if current_error_parts_after_od_scrape else None
                     break
     return PaginatedSummariesAPIResponse( search_source=search_source_display, requested_page=current_page_for_slice, page_size=query.page_size, total_articles_available=total_articles_available, total_pages=total_pages, processed_articles_on_page=results_on_page)
