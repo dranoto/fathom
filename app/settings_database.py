@@ -114,7 +114,7 @@ def create_settings_db_and_tables():
     Creates the database and the configuration table.
     Populates the table with default settings if they don't exist.
     """
-    print("SETTINGS_DB: Attempting to create settings database tables...")
+    logger.info("SETTINGS_DB: Attempting to create settings database tables...")
     try:
         Base.metadata.create_all(bind=engine)
         print("SETTINGS_DB: Settings database tables checked/created successfully.")
