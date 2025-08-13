@@ -6,9 +6,12 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-# Langchain and LLM related imports
+# This is for creating LangChain-compatible LLM instances
 from langchain_google_genai import GoogleGenerativeAI
-import google.genai as genai
+
+# This is for direct Google API access (e.g., listing models, configuring keys)
+import google.generativeai as genai
+import google.api_core.exceptions
 
 # APScheduler imports
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
