@@ -93,8 +93,14 @@ async def get_news_summaries_endpoint(
         min_word_count_threshold = 100
 
     # Apply the word count filter if no other specific filters are active.
+    # This now includes articles where word_count is NULL (i.e., legacy articles)
     if not query.feed_source_ids and not query.tag_ids and not query.keyword:
-        db_query = db_query.filter(database.Article.word_count >= min_word_count_threshold)
+        db_query = db_query.filter(
+            or_(
+                database.Article.word_count >= min_word_count_threshold,
+                database.Article.word_count.is_(None)
+            )
+        )
 
     total_articles_available = db_query.count()
     total_pages = math.ceil(total_articles_available / query.page_size) if query.page_size > 0 else 0
@@ -146,7 +152,10 @@ async def get_news_summaries_endpoint(
         elif current_word_count is not None and current_word_count < min_word_count_threshold:
             error_parts_for_display.append(f"Content previously scraped but found to be very short (word count: {current_word_count}).")
 
-        can_process_ai = current_text_content and not current_text_content.startswith(SCRAPING_ERROR_PREFIX) and (current_word_count is not None and current_word_count >= min_word_count_threshold)
+        # Allow summarization if content exists and either word count is sufficient OR word count is null (legacy article)
+        can_process_ai = current_text_content and \
+                         not current_text_content.startswith(SCRAPING_ERROR_PREFIX) and \
+                         (current_word_count is None or current_word_count >= min_word_count_threshold)
         article_result_data["is_summarizable"] = can_process_ai
 
         if error_parts_for_display:
