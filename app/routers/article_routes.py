@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from langchain_core.documents import Document as LangchainDocument
 from langchain_google_genai import GoogleGenerativeAI
 
-from .. import database
+from .. import database, settings_database
 from .. import scraper
 from .. import summarizer
 from .. import config as app_config
@@ -30,16 +30,15 @@ router = APIRouter(prefix="/api/articles", tags=["articles"])
 
 SCRAPING_ERROR_PREFIX = "Scraping Error:"
 CONTENT_ERROR_PREFIX = "Content Error:"
-TEXT_LENGTH_THRESHOLD = 100
 
 
-async def _should_attempt_scrape(article_db_obj: database.Article) -> bool:
+async def _should_attempt_scrape(article_db_obj: database.Article, text_length_threshold: int) -> bool:
     if article_db_obj.scraped_text_content and article_db_obj.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX):
         logger.info(f"Article ID {article_db_obj.id} previously had a scraping error ('{article_db_obj.scraped_text_content[:50]}...'). Skipping automatic re-scrape.")
         return False
     if article_db_obj.scraped_text_content and \
        not article_db_obj.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX) and \
-       len(article_db_obj.scraped_text_content) < TEXT_LENGTH_THRESHOLD and \
+       len(article_db_obj.scraped_text_content) < text_length_threshold and \
        article_db_obj.full_html_content is not None:
         logger.info(f"Article ID {article_db_obj.id} has short text content from a previous successful scrape. Skipping automatic re-scrape.")
         return False
@@ -51,8 +50,11 @@ async def _should_attempt_scrape(article_db_obj: database.Article) -> bool:
 
 @router.post("/summaries", response_model=PaginatedSummariesAPIResponse)
 async def get_news_summaries_endpoint(
-    query: NewsPageQuery, db: SQLAlchemySession = Depends(database.get_db),
-    llm_summary: GoogleGenerativeAI = Depends(get_llm_summary), llm_tag: GoogleGenerativeAI = Depends(get_llm_tag)
+    query: NewsPageQuery,
+    db: SQLAlchemySession = Depends(database.get_db),
+    settings_db: SQLAlchemySession = Depends(settings_database.get_db),
+    llm_summary: GoogleGenerativeAI = Depends(get_llm_summary),
+    llm_tag: GoogleGenerativeAI = Depends(get_llm_tag)
 ):
     if not llm_summary and not llm_tag:
         logger.warning("API Warning: Summarization or Tagging LLM not available in get_news_summaries_endpoint. AI features will be disabled for this request.")
@@ -97,6 +99,11 @@ async def get_news_summaries_endpoint(
                 summaries_map[summary.article_id] = summary.summary_text
     # --- End Optimization ---
 
+    try:
+        text_length_threshold = int(settings_database.get_setting(settings_db, "minimum_word_count", "100"))
+    except (ValueError, TypeError):
+        text_length_threshold = 100
+
     results_on_page: List[ArticleResult] = []
     articles_needing_ondemand_scrape: List[database.Article] = []
     for article_db_obj in articles_from_db:
@@ -112,7 +119,7 @@ async def get_news_summaries_endpoint(
             "error_message": None,
             "is_summarizable": False # Will be updated below
         }
-        needs_on_demand_scrape = await _should_attempt_scrape(article_db_obj)
+        needs_on_demand_scrape = await _should_attempt_scrape(article_db_obj, text_length_threshold)
         current_text_content = article_db_obj.scraped_text_content
         error_parts_for_display = []
         if needs_on_demand_scrape:
@@ -120,10 +127,10 @@ async def get_news_summaries_endpoint(
             error_parts_for_display.append("Content pending fresh scrape.")
         elif current_text_content and current_text_content.startswith(SCRAPING_ERROR_PREFIX):
             error_parts_for_display.append(current_text_content)
-        elif current_text_content and len(current_text_content) < TEXT_LENGTH_THRESHOLD and article_db_obj.full_html_content is not None:
+        elif current_text_content and len(current_text_content) < text_length_threshold and article_db_obj.full_html_content is not None:
             error_parts_for_display.append("Content previously scraped but found to be very short.")
 
-        can_process_ai = current_text_content and not current_text_content.startswith(SCRAPING_ERROR_PREFIX) and len(current_text_content) >= TEXT_LENGTH_THRESHOLD
+        can_process_ai = current_text_content and not current_text_content.startswith(SCRAPING_ERROR_PREFIX) and len(current_text_content) >= text_length_threshold
         article_result_data["is_summarizable"] = can_process_ai
 
         if error_parts_for_display:
@@ -158,10 +165,10 @@ async def get_news_summaries_endpoint(
                     current_error_parts_after_od_scrape = []
                     if art_db_obj_to_process.scraped_text_content and art_db_obj_to_process.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX):
                         current_error_parts_after_od_scrape.append(art_db_obj_to_process.scraped_text_content)
-                    elif art_db_obj_to_process.scraped_text_content and len(art_db_obj_to_process.scraped_text_content) < TEXT_LENGTH_THRESHOLD and art_db_obj_to_process.full_html_content is not None:
+                    elif art_db_obj_to_process.scraped_text_content and len(art_db_obj_to_process.scraped_text_content) < text_length_threshold and art_db_obj_to_process.full_html_content is not None:
                         current_error_parts_after_od_scrape.append("Content scraped but found to be very short.")
 
-                    res_art.is_summarizable = art_db_obj_to_process.scraped_text_content and not art_db_obj_to_process.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX) and len(art_db_obj_to_process.scraped_text_content) >= TEXT_LENGTH_THRESHOLD
+                    res_art.is_summarizable = art_db_obj_to_process.scraped_text_content and not art_db_obj_to_process.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX) and len(art_db_obj_to_process.scraped_text_content) >= text_length_threshold
 
                     if not res_art.summary:
                          latest_s = db.query(database.Summary).filter(database.Summary.article_id == res_art.id).order_by(database.Summary.created_at.desc()).first()
@@ -173,15 +180,25 @@ async def get_news_summaries_endpoint(
 
 @router.post("/{article_id}/regenerate-summary", response_model=ArticleResult)
 async def regenerate_article_summary(
-    article_id: int, request_body: RegenerateSummaryRequest, db: SQLAlchemySession = Depends(database.get_db),
-    llm_summary: GoogleGenerativeAI = Depends(get_llm_summary), llm_tag: GoogleGenerativeAI = Depends(get_llm_tag)
+    article_id: int,
+    request_body: RegenerateSummaryRequest,
+    db: SQLAlchemySession = Depends(database.get_db),
+    settings_db: SQLAlchemySession = Depends(settings_database.get_db),
+    llm_summary: GoogleGenerativeAI = Depends(get_llm_summary),
+    llm_tag: GoogleGenerativeAI = Depends(get_llm_tag)
 ):
     if not llm_summary: raise HTTPException(status_code=503, detail="Summarization LLM not available.")
+
+    try:
+        text_length_threshold = int(settings_database.get_setting(settings_db, "minimum_word_count", "100"))
+    except (ValueError, TypeError):
+        text_length_threshold = 100
+
     article_db = db.query(database.Article).options(joinedload(database.Article.tags), joinedload(database.Article.feed_source)).filter(database.Article.id == article_id).first()
     if not article_db: raise HTTPException(status_code=404, detail="Article not found.")
     logger.info(f"API Call: Regenerate summary for Article ID {article_id}. Force re-scrape if content is missing/error/short.")
     current_text_content = article_db.scraped_text_content
-    force_scrape_needed = (not current_text_content or current_text_content.startswith(SCRAPING_ERROR_PREFIX) or current_text_content.startswith(CONTENT_ERROR_PREFIX) or (len(current_text_content) < TEXT_LENGTH_THRESHOLD and article_db.full_html_content is not None) or not article_db.full_html_content )
+    force_scrape_needed = (not current_text_content or current_text_content.startswith(SCRAPING_ERROR_PREFIX) or current_text_content.startswith(CONTENT_ERROR_PREFIX) or (len(current_text_content) < text_length_threshold and article_db.full_html_content is not None) or not article_db.full_html_content )
     if force_scrape_needed:
         logger.info(f"API Regenerate: Content for Article ID {article_id} requires re-scraping for regeneration.")
         scraped_docs_list_regen: List[LangchainDocument] = await scraper.scrape_urls([str(article_db.url)])
@@ -211,7 +228,7 @@ async def regenerate_article_summary(
             # No commit here
             logger.error(f"API Regenerate: Failed to re-scrape for Article ID {article_id}: {scraper_error_msg_regen}")
             raise HTTPException(status_code=500, detail=f"Failed to get valid content for regeneration: {scraper_error_msg_regen}")
-    if not current_text_content or current_text_content.startswith(SCRAPING_ERROR_PREFIX) or len(current_text_content) < TEXT_LENGTH_THRESHOLD:
+    if not current_text_content or current_text_content.startswith(SCRAPING_ERROR_PREFIX) or len(current_text_content) < text_length_threshold:
         logger.error(f"API Regenerate: Article text content for ID {article_id} is still invalid or too short ('{current_text_content[:100]}...') after potential re-scrape attempt.")
         existing_summary_obj = db.query(database.Summary).filter(database.Summary.article_id == article_db.id).order_by(database.Summary.created_at.desc()).first()
         summary_to_return = existing_summary_obj.summary_text if existing_summary_obj else None
@@ -222,10 +239,10 @@ async def regenerate_article_summary(
     prompt_to_use = request_body.custom_prompt if request_body.custom_prompt and request_body.custom_prompt.strip() else app_config.DEFAULT_SUMMARY_PROMPT
     new_summary_text = await summarizer.summarize_document_content(lc_doc_for_summary_regen, llm_summary, prompt_to_use)
     db.query(database.Summary).filter(database.Summary.article_id == article_id).delete(synchronize_session=False)
-    model_name = database.get_setting(db, "summary_model_name", app_config.DEFAULT_SUMMARY_MODEL_NAME)
+    model_name = settings_database.get_setting(settings_db, "summary_model_name", app_config.DEFAULT_SUMMARY_MODEL_NAME)
     new_summary_db_obj = database.Summary(article_id=article_id, summary_text=new_summary_text, prompt_used=prompt_to_use, model_used=model_name)
     db.add(new_summary_db_obj)
-    if request_body.regenerate_tags and llm_tag and current_text_content and not current_text_content.startswith(SCRAPING_ERROR_PREFIX) and len(current_text_content) >= TEXT_LENGTH_THRESHOLD :
+    if request_body.regenerate_tags and llm_tag and current_text_content and not current_text_content.startswith(SCRAPING_ERROR_PREFIX) and len(current_text_content) >= text_length_threshold :
         logger.info(f"API Regenerate: Regenerating tags for Article ID {article_id}.")
         if article_db.tags:
             article_db.tags.clear()

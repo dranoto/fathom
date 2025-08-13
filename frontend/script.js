@@ -188,7 +188,11 @@ async function initializeAppSettings() {
 
 
         state.setDbFeedSources(initialBackendConfig.all_db_feed_sources || []);
-        await feedHandler.loadAndRenderDbFeeds(); 
+
+        // With feeds loaded from initial-config, we can now render them directly from state
+        // without another API call. This is part of the fix for the disappearing articles bug.
+        feedHandler.renderFeedsFromState();
+
         uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter); 
         uiManager.showSection('main-feed-section'); 
 
