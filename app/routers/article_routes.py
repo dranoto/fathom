@@ -98,7 +98,7 @@ async def get_news_summaries_endpoint(
 
     total_articles_available = db_query.count()
     total_pages = math.ceil(total_articles_available / query.page_size) if query.page_size > 0 else 0
-    current_page_for_slice = max(1, query.page);
+    current_page_for_slice = max(1, query.page)
     if total_pages > 0: current_page_for_slice = min(current_page_for_slice, total_pages)
     offset = (current_page_for_slice - 1) * query.page_size
     articles_from_db = db_query.limit(query.page_size).offset(offset).all()
@@ -176,9 +176,13 @@ async def get_news_summaries_endpoint(
                 art_db_obj_to_process.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_od}"
                 art_db_obj_to_process.full_html_content = None
                 art_db_obj_to_process.word_count = 0
-            db.add(art_db_obj_to_process);
-            try: db.commit(); db.refresh(art_db_obj_to_process)
-            except Exception as e: db.rollback(); logger.error(f"Error committing on-demand scrape for article {art_db_obj_to_process.id}: {e}", exc_info=True)
+            db.add(art_db_obj_to_process)
+            try:
+                db.commit()
+                db.refresh(art_db_obj_to_process)
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Error committing on-demand scrape for article {art_db_obj_to_process.id}: {e}", exc_info=True)
             for res_art in results_on_page:
                 if res_art.id == art_db_obj_to_process.id:
                     current_error_parts_after_od_scrape = []
@@ -236,7 +240,9 @@ async def regenerate_article_summary(
                 logger.info(f"API Regenerate: Successfully re-scraped content for Article ID {article_id}.")
             else:
                 scraper_error_msg_regen = scraper_error_msg_regen or "Failed to re-scrape content (regen)"
-                article_db.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_regen}"; article_db.full_html_content = None; article_db.word_count = 0;
+                article_db.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_regen}"
+                article_db.full_html_content = None
+                article_db.word_count = 0
                 current_text_content = article_db.scraped_text_content
                 db.add(article_db)
                 # No commit here, let the transaction fail and be handled by FastAPI/Starlette
@@ -244,7 +250,9 @@ async def regenerate_article_summary(
                 raise HTTPException(status_code=500, detail=f"Failed to get valid content for regeneration: {scraper_error_msg_regen}")
         else:
             scraper_error_msg_regen = "Failed to re-scrape: No document returned."
-            article_db.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_regen}"; article_db.full_html_content = None; article_db.word_count = 0;
+            article_db.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_regen}"
+            article_db.full_html_content = None
+            article_db.word_count = 0
             current_text_content = article_db.scraped_text_content
             db.add(article_db)
             # No commit here
