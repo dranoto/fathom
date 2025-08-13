@@ -10,8 +10,8 @@ from fastapi.responses import FileResponse
 from langchain_google_genai import GoogleGenerativeAI
 
 # This is for direct Google API access (e.g., listing models, configuring keys)
-import google.generativeai as genai
-import google.api_core.exceptions
+from google import genai
+from google.genai import types
 
 # APScheduler imports
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
