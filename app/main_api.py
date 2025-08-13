@@ -100,7 +100,7 @@ async def startup_event():
 
             # Step 2: Use the client object to list models.
             app.state.available_models = sorted([
-                model.name for model in client.list_models()
+                model.name for model in client.models.list()
                 if 'generateContent' in model.supported_generation_methods
             ])
             logger.info(f"MAIN_API: Successfully fetched {len(app.state.available_models)} available models.")
