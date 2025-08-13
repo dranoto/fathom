@@ -98,12 +98,23 @@ async def startup_event():
             app.state.google_ai_client = client # Store the client for later use
             logger.info("MAIN_API: Google AI Client initialized successfully.")
 
-            # Step 2: Use the client object to list models.
-            app.state.available_models = sorted([
-                model.name for model in client.models.list()
-                if 'generateContent' in model.supported_generation_methods
-            ])
-            logger.info(f"MAIN_API: Successfully fetched {len(app.state.available_models)} available models.")
+            # --- DIAGNOSTIC STEP ---
+            # Let's get all models and print the first one to see its actual structure.
+            all_models_list = list(client.models.list())
+            if all_models_list:
+                logger.info("--- START DIAGNOSTIC DUMP OF FIRST MODEL ---")
+                first_model = all_models_list[0]
+                # This will print the entire object structure to your logs.
+                logger.info(f"MODEL OBJECT DETAILS: {first_model}")
+                logger.info("--- END DIAGNOSTIC DUMP ---")
+            else:
+                logger.warning("MAIN_API: No models were returned from the API.")
+        
+            # For now, we will proceed without the broken filter.
+            # This will let the app start, but the model list may be imperfect.
+            app.state.available_models = sorted([model.name for model in all_models_list])
+            logger.info(f"MAIN_API: Successfully fetched {len(app.state.available_models)} models (unfiltered).")
+
 
             # --- The rest of your LLM instance initialization follows ---
             # (This part of your code was likely okay, but ensure it uses the fetched model names)
