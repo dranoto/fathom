@@ -395,7 +395,7 @@ function pollForRefreshCompletion() {
                 timeWaited += pollInterval;
                 if (timeWaited >= maxPollTime) {
                     clearInterval(intervalId);
-                    alert("The refresh is taking a long time. The page will now reload, but the refresh may still be running in the background.");
+                    alert("The refresh is taking longer than expected. The process will continue in the background, and new articles will appear when ready.");
                     uiManager.showLoadingIndicator(false);
                 }
             }
