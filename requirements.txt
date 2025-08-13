@@ -3,6 +3,7 @@ uvicorn[standard]
 python-dotenv
 langchain
 langchain-google-genai
+google-genai # For programmatically listing models
 langchain-community # For document_loaders like PlaywrightURLLoader
 feedparser
 playwright
