@@ -83,6 +83,12 @@ async def get_news_summaries_endpoint(
         keyword_like = f"%{query.keyword}%"
         db_query = db_query.filter(or_(database.Article.title.ilike(keyword_like), database.Article.scraped_text_content.ilike(keyword_like)))
         search_source_display_parts.append(f"Keyword: '{query.keyword}'")
+
+    # Add filtering for favorites
+    if query.favorites_only:
+        db_query = db_query.filter(database.Article.is_favorite == True)
+        search_source_display_parts.append("Favorites")
+
     search_source_display = " & ".join(search_source_display_parts) if search_source_display_parts else "All Articles"
     db_query = db_query.options(joinedload(database.Article.tags), joinedload(database.Article.feed_source)).order_by(database.Article.published_date.desc().nullslast(), database.Article.id.desc())
 
@@ -136,6 +142,7 @@ async def get_news_summaries_endpoint(
             "source_feed_url": article_db_obj.feed_source.url if article_db_obj.feed_source else None,
             "summary": summaries_map.get(article_db_obj.id), # Get summary from the map
             "tags": [ArticleTagResponse.from_orm(tag) for tag in article_db_obj.tags],
+            "is_favorite": article_db_obj.is_favorite,
             "error_message": None,
             "is_summarizable": False # Will be updated below
         }
@@ -210,6 +217,62 @@ async def get_news_summaries_endpoint(
     return PaginatedSummariesAPIResponse( search_source=search_source_display, requested_page=current_page_for_slice, page_size=query.page_size, total_articles_available=total_articles_available, total_pages=total_pages, processed_articles_on_page=results_on_page)
 
 
+@router.post("/{article_id}/favorite", response_model=ArticleResult)
+async def toggle_favorite_status(
+    article_id: int,
+    db: SQLAlchemySession = Depends(database.get_db)
+):
+    """
+    Toggles the 'is_favorite' status of a single article.
+    """
+    logger.info(f"API Call: Toggle favorite status for Article ID {article_id}")
+
+    # Use joinedload to efficiently fetch related data needed for the response model
+    article_db = db.query(database.Article).options(
+        joinedload(database.Article.tags),
+        joinedload(database.Article.feed_source)
+    ).filter(database.Article.id == article_id).first()
+
+    if not article_db:
+        raise HTTPException(status_code=404, detail="Article not found.")
+
+    # Toggle the is_favorite status
+    article_db.is_favorite = not article_db.is_favorite
+
+    try:
+        db.commit()
+        db.refresh(article_db)
+        logger.info(f"API: Successfully set is_favorite={article_db.is_favorite} for Article ID {article_id}.")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"API: Error committing favorite status for Article ID {article_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="A database error occurred while updating the article.")
+
+    # Fetch the latest summary for the response
+    latest_summary = db.query(database.Summary).filter(
+        database.Summary.article_id == article_id
+    ).order_by(database.Summary.created_at.desc()).first()
+
+    return ArticleResult(
+        id=article_db.id,
+        title=article_db.title,
+        url=article_db.url,
+        summary=latest_summary.summary_text if latest_summary else None,
+        publisher=article_db.feed_source.name if article_db.feed_source else article_db.publisher_name,
+        published_date=article_db.published_date,
+        created_at=article_db.created_at,
+        source_feed_url=article_db.feed_source.url if article_db.feed_source else None,
+        tags=[ArticleTagResponse.from_orm(tag) for tag in article_db.tags],
+        is_favorite=article_db.is_favorite,
+        # Determine if summarizable based on current content
+        is_summarizable=(
+            article_db.scraped_text_content and
+            not article_db.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX) and
+            (article_db.word_count is None or article_db.word_count >= 100) # Assuming a default threshold for safety
+        )
+    )
+
+
 @router.post("/{article_id}/regenerate-summary", response_model=ArticleResult)
 async def regenerate_article_summary(
     article_id: int,
@@ -272,7 +335,7 @@ async def regenerate_article_summary(
         existing_summary_obj = db.query(database.Summary).filter(database.Summary.article_id == article_db.id).order_by(database.Summary.created_at.desc()).first()
         summary_to_return = existing_summary_obj.summary_text if existing_summary_obj else None
         error_msg_response = f"Cannot regenerate summary: article content is invalid or too short (word count: {current_word_count})."
-        return ArticleResult(id=article_db.id, title=article_db.title, url=article_db.url, summary=summary_to_return, publisher=article_db.feed_source.name if article_db.feed_source else article_db.publisher_name, published_date=article_db.published_date, source_feed_url=article_db.feed_source.url if article_db.feed_source else None, tags=[ArticleTagResponse.from_orm(tag) for tag in article_db.tags], error_message=error_msg_response, is_summarizable=False)
+        return ArticleResult(id=article_db.id, title=article_db.title, url=article_db.url, summary=summary_to_return, publisher=article_db.feed_source.name if article_db.feed_source else article_db.publisher_name, published_date=article_db.published_date, source_feed_url=article_db.feed_source.url if article_db.feed_source else None, tags=[ArticleTagResponse.from_orm(tag) for tag in article_db.tags], error_message=error_msg_response, is_summarizable=False, is_favorite=article_db.is_favorite)
 
     lc_doc_for_summary_regen = LangchainDocument(page_content=current_text_content, metadata={"source": str(article_db.url), "id": article_db.id})
     prompt_to_use = request_body.custom_prompt if request_body.custom_prompt and request_body.custom_prompt.strip() else app_config.DEFAULT_SUMMARY_PROMPT
@@ -314,7 +377,7 @@ async def regenerate_article_summary(
         # Decide on what to return or raise. Raising an exception might be more RESTful.
         raise HTTPException(status_code=500, detail=f"A database error occurred while saving changes: {e}")
 
-    return ArticleResult(id=article_db.id, title=article_db.title, url=article_db.url, summary=new_summary_text, publisher=article_db.feed_source.name if article_db.feed_source else article_db.publisher_name, published_date=article_db.published_date, source_feed_url=article_db.feed_source.url if article_db.feed_source else None, tags=[ArticleTagResponse.from_orm(tag) for tag in article_db.tags], error_message=None if not new_summary_text.startswith("Error:") else new_summary_text, is_summarizable=True)
+    return ArticleResult(id=article_db.id, title=article_db.title, url=article_db.url, summary=new_summary_text, publisher=article_db.feed_source.name if article_db.feed_source else article_db.publisher_name, published_date=article_db.published_date, source_feed_url=article_db.feed_source.url if article_db.feed_source else None, tags=[ArticleTagResponse.from_orm(tag) for tag in article_db.tags], error_message=None if not new_summary_text.startswith("Error:") else new_summary_text, is_summarizable=True, is_favorite=article_db.is_favorite)
 
 
 # NEW POLLING ENDPOINT

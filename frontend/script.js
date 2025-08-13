@@ -60,6 +60,7 @@ async function fetchAndDisplaySummaries(forceBackendRssRefresh = false, page = s
         keyword: keyword || null,
         summary_prompt: (state.currentSummaryPrompt !== state.defaultSummaryPrompt) ? state.currentSummaryPrompt : null,
         tag_generation_prompt: (state.currentTagGenerationPrompt !== state.defaultTagGenerationPrompt) ? state.currentTagGenerationPrompt : null,
+        favorites_only: state.activeView === 'favorites',
     };
 
     try {
@@ -76,7 +77,8 @@ async function fetchAndDisplaySummaries(forceBackendRssRefresh = false, page = s
             data.processed_articles_on_page,
             page === 1, 
             handleArticleTagClick, 
-            uiManager.openRegenerateSummaryModal 
+            uiManager.openRegenerateSummaryModal,
+            handleFavoriteClick
         );
 
         if (page === 1 && data.processed_articles_on_page && data.processed_articles_on_page.length > 0) {
@@ -203,9 +205,11 @@ function handleArticleTagClick(tagId, tagName) {
     else { state.addActiveTagFilter({ id: tagId, name: tagName }); }
     state.setActiveFeedFilterIds([]);
     state.setCurrentKeywordSearch(null);
+    state.setActiveView('main');
     const keywordInput = document.getElementById('keyword-search-input'); // Get ref here
     if(keywordInput) keywordInput.value = ''; 
-    uiManager.updateFeedFilterButtonStyles(); 
+    uiManager.updateFeedFilterButtonStyles();
+    uiManager.updateNavButtonStyles();
     uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter); 
     state.setCurrentPage(1);
     fetchAndDisplaySummaries(false, 1, null); 
@@ -226,9 +230,11 @@ function handleFeedFilterClick(feedId) {
     else { state.setActiveFeedFilterIds([feedId]); }
     state.setActiveTagFilterIds([]);
     state.setCurrentKeywordSearch(null);
+    state.setActiveView('main');
     const keywordInput = document.getElementById('keyword-search-input'); // Get ref here
     if(keywordInput) keywordInput.value = '';
     uiManager.updateFeedFilterButtonStyles();
+    uiManager.updateNavButtonStyles();
     uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter);
     state.setCurrentPage(1);
     fetchAndDisplaySummaries(false, 1, null); 
@@ -241,6 +247,27 @@ function handleAllFeedsClick() {
     uiManager.updateFeedFilterButtonStyles();
     state.setCurrentPage(1);
     fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch); 
+}
+
+async function handleFavoriteClick(articleId, favoriteButtonElement) {
+    console.log(`MainScript: Favorite clicked for Article ID: ${articleId}`);
+    try {
+        // Optimistically update the UI
+        favoriteButtonElement.classList.toggle('is-favorite');
+        const updatedArticle = await apiService.toggleFavoriteStatus(articleId);
+        console.log("MainScript: Favorite status updated via API:", updatedArticle.is_favorite);
+        // Ensure UI is consistent with the response
+        if (updatedArticle.is_favorite) {
+            favoriteButtonElement.classList.add('is-favorite');
+        } else {
+            favoriteButtonElement.classList.remove('is-favorite');
+        }
+    } catch (error) {
+        console.error("MainScript: Error toggling favorite status:", error);
+        // Revert the UI change on error
+        favoriteButtonElement.classList.toggle('is-favorite');
+        alert(`Failed to update favorite status: ${error.message}`);
+    }
 }
 
 async function handleRegenerateSummaryFormSubmit(event) {
@@ -285,6 +312,37 @@ function handleRegenerateModalUseDefaultPrompt() {
 
 function setupGlobalEventListeners() {
     console.log("MainScript: Setting up global event listeners...");
+
+    const navMainBtn = document.getElementById('nav-main-btn');
+    const navFavoritesBtn = document.getElementById('nav-favorites-btn');
+
+    if (navMainBtn) {
+        navMainBtn.addEventListener('click', () => {
+            if (state.activeView === 'main') return; // Don't re-fetch if already on main
+            state.setActiveView('main');
+            state.setCurrentPage(1);
+            fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch);
+            uiManager.updateNavButtonStyles(); // New function to be added to uiManager
+        });
+    }
+
+    if (navFavoritesBtn) {
+        navFavoritesBtn.addEventListener('click', () => {
+            if (state.activeView === 'favorites') return; // Don't re-fetch if already on favorites
+            state.setActiveView('favorites');
+            state.setCurrentPage(1);
+            // Clear other filters when switching to favorites
+            state.setActiveFeedFilterIds([]);
+            state.setActiveTagFilterIds([]);
+            state.setCurrentKeywordSearch(null);
+            const keywordInput = document.getElementById('keyword-search-input');
+            if(keywordInput) keywordInput.value = '';
+
+            fetchAndDisplaySummaries(false, 1, null);
+            uiManager.updateNavButtonStyles(); // New function to be added to uiManager
+        });
+    }
+
     // DOM elements like keywordSearchInput are now initialized at the top of this file or within this function.
     keywordSearchInput = document.getElementById('keyword-search-input'); 
     keywordSearchBtn = document.getElementById('keyword-search-btn');
@@ -293,9 +351,14 @@ function setupGlobalEventListeners() {
         keywordSearchBtn.addEventListener('click', () => {
             const searchTerm = keywordSearchInput.value.trim();
             state.setCurrentKeywordSearch(searchTerm || null);
-            state.setActiveFeedFilterIds([]); state.setActiveTagFilterIds([]);
-            uiManager.updateFeedFilterButtonStyles(); uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter);
-            state.setCurrentPage(1); fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch);
+            state.setActiveFeedFilterIds([]);
+            state.setActiveTagFilterIds([]);
+            state.setActiveView('main');
+            uiManager.updateFeedFilterButtonStyles();
+            uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter);
+            uiManager.updateNavButtonStyles();
+            state.setCurrentPage(1);
+            fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch);
         });
         keywordSearchInput.addEventListener('keypress', (event) => {
             if (event.key === 'Enter') { event.preventDefault(); keywordSearchBtn.click(); }

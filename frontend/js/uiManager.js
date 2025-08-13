@@ -12,7 +12,7 @@ import * as chatHandler from './chatHandler.js';
 // --- DOM Element References ---
 let resultsContainer, loadingIndicator, loadingText, infiniteScrollLoadingIndicator,
     feedFilterControls, activeTagFiltersDisplay,
-    mainFeedSection, setupSection, navMainBtn, navSetupBtn,
+    mainFeedSection, setupSection, navMainBtn, navFavoritesBtn, navSetupBtn,
     regenerateSummaryModal, closeRegenerateModalBtn, modalArticleIdInput, modalSummaryPromptInput, modalUseDefaultPromptBtn,
     fullArticleModal, closeFullArticleModalBtn, fullArticleModalTitle, fullArticleModalBody, fullArticleModalOriginalLink;
 
@@ -30,6 +30,7 @@ export function initializeUIDOMReferences() {
     mainFeedSection = document.getElementById('main-feed-section');
     setupSection = document.getElementById('setup-section');
     navMainBtn = document.getElementById('nav-main-btn');
+    navFavoritesBtn = document.getElementById('nav-favorites-btn');
     navSetupBtn = document.getElementById('nav-setup-btn');
 
     regenerateSummaryModal = document.getElementById('regenerate-summary-modal');
@@ -124,7 +125,7 @@ export function closeFullArticleModal() {
 /**
  * Displays article results in the results container.
  */
-export function displayArticleResults(articles, clearPrevious, onTagClickCallback, onRegenerateClickCallback) {
+export function displayArticleResults(articles, clearPrevious, onTagClickCallback, onRegenerateClickCallback, onFavoriteClickCallback) {
     if (!resultsContainer) {
         console.error("UIManager: resultsContainer is null! Cannot display articles.");
         return;
@@ -175,6 +176,21 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         directLinkIcon.title = "View Original Article";
         directLinkIcon.innerHTML = "&#128279;"; // Link symbol emoji 
         articleCard.appendChild(directLinkIcon); // Append directly
+
+        const favoriteBtn = document.createElement('button');
+        favoriteBtn.classList.add('favorite-btn');
+        if (article.is_favorite) {
+            favoriteBtn.classList.add('is-favorite');
+        }
+        favoriteBtn.title = "Toggle Favorite";
+        favoriteBtn.innerHTML = '&#9733;'; // Star symbol
+        favoriteBtn.onclick = (e) => {
+            e.stopPropagation(); // Prevent card click events
+            if (onFavoriteClickCallback && typeof onFavoriteClickCallback === 'function') {
+                onFavoriteClickCallback(article.id, favoriteBtn);
+            }
+        };
+        articleCard.appendChild(favoriteBtn);
 
         // --- End of ICON PLACEMENT FIX ---
 
@@ -322,6 +338,34 @@ export function updateFeedFilterButtonStyles() {
 }
 
 /**
+ * Updates the visual style of the main navigation buttons (Main, Favorites, Setup).
+ */
+export function updateNavButtonStyles() {
+    if (!navMainBtn || !navFavoritesBtn || !navSetupBtn) return;
+
+    navMainBtn.classList.remove('active');
+    navFavoritesBtn.classList.remove('active');
+    navSetupBtn.classList.remove('active');
+
+    // Logic to decide which button to activate
+    const currentVisibleSection = document.querySelector('.content-section.active');
+    if (currentVisibleSection) {
+        if (currentVisibleSection.id === 'setup-section') {
+            navSetupBtn.classList.add('active');
+            return; // Exit if on setup page
+        }
+    }
+
+    // If not on setup, decide between main and favorites
+    if (state.activeView === 'favorites') {
+        navFavoritesBtn.classList.add('active');
+    } else {
+        navMainBtn.classList.add('active');
+    }
+}
+
+
+/**
  * Updates the UI to display active tag filters.
  */
 export function updateActiveTagFiltersUI(onRemoveTagFilterCallback) {
@@ -361,25 +405,23 @@ export function updateActiveTagFiltersUI(onRemoveTagFilterCallback) {
  * Shows a specific section.
  */
 export function showSection(sectionId) {
-    if (!mainFeedSection || !setupSection || !navMainBtn || !navSetupBtn) {
-        console.error("UIManager: One or more navigation/section elements not found.");
+    if (!mainFeedSection || !setupSection) {
+        console.error("UIManager: Main feed or setup section element not found.");
         return;
     }
     mainFeedSection.classList.remove('active');
     setupSection.classList.remove('active');
-    navMainBtn.classList.remove('active');
-    navSetupBtn.classList.remove('active');
+
     const sectionToShow = document.getElementById(sectionId);
     if (sectionToShow) {
         sectionToShow.classList.add('active');
     } else {
         console.error(`UIManager: Section with ID '${sectionId}' not found.`);
+        // Fallback to main feed if something goes wrong
+        mainFeedSection.classList.add('active');
     }
-    if (sectionId === 'main-feed-section' && navMainBtn) {
-        navMainBtn.classList.add('active');
-    } else if (sectionId === 'setup-section' && navSetupBtn) {
-        navSetupBtn.classList.add('active');
-    }
+
+    updateNavButtonStyles();
     console.log(`UIManager: Switched to section: ${sectionId}`);
 }
 
@@ -428,8 +470,17 @@ export function setupUIManagerEventListeners(onRegenerateModalUseDefaultPrompt) 
     if (closeFullArticleModalBtn) {
         closeFullArticleModalBtn.onclick = closeFullArticleModal;
     }
-    if (navMainBtn) navMainBtn.addEventListener('click', () => showSection('main-feed-section'));
-    if (navSetupBtn) navSetupBtn.addEventListener('click', () => showSection('setup-section'));
+    // The main nav buttons (Main, Favorites) are now handled in script.js to allow state changes.
+    // The setup button can stay here as it only controls section visibility.
+    if (navSetupBtn) {
+        navSetupBtn.addEventListener('click', () => {
+            showSection('setup-section');
+            // We also need to ensure the view state is consistent if we came from favorites
+            if (state.activeView !== 'main') {
+                state.setActiveView('main');
+            }
+        });
+    }
     console.log("UIManager: Basic event listeners set up.");
 }
 

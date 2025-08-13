@@ -47,6 +47,7 @@ class NewsPageQuery(BaseModel):
     keyword: Optional[str] = None
     summary_prompt: Optional[str] = None
     tag_generation_prompt: Optional[str] = None
+    favorites_only: bool = False
 
 class ArticleTagResponse(BaseModel):
     id: int
@@ -64,6 +65,7 @@ class ArticleResult(BaseModel):
     created_at: Optional[datetime] = None # NEW: Add created_at for polling logic
     source_feed_url: Optional[str] = None
     tags: List[ArticleTagResponse] = []
+    is_favorite: bool = False
     error_message: Optional[str] = None
     is_summarizable: bool = False
     class Config: from_attributes = True
