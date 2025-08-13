@@ -32,16 +32,24 @@ SCRAPING_ERROR_PREFIX = "Scraping Error:"
 CONTENT_ERROR_PREFIX = "Content Error:"
 
 
-async def _should_attempt_scrape(article_db_obj: database.Article, text_length_threshold: int) -> bool:
+async def _should_attempt_scrape(article_db_obj: database.Article, min_word_count_threshold: int) -> bool:
     if article_db_obj.scraped_text_content and article_db_obj.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX):
         logger.info(f"Article ID {article_db_obj.id} previously had a scraping error ('{article_db_obj.scraped_text_content[:50]}...'). Skipping automatic re-scrape.")
         return False
-    if article_db_obj.scraped_text_content and \
-       not article_db_obj.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX) and \
-       len(article_db_obj.scraped_text_content) < text_length_threshold and \
-       article_db_obj.full_html_content is not None:
-        logger.info(f"Article ID {article_db_obj.id} has short text content from a previous successful scrape. Skipping automatic re-scrape.")
+
+    # New logic using word_count
+    if article_db_obj.word_count is not None and article_db_obj.word_count < min_word_count_threshold:
+        logger.info(f"Article ID {article_db_obj.id} has a word count ({article_db_obj.word_count}) below threshold ({min_word_count_threshold}). Skipping automatic re-scrape.")
         return False
+
+    # Fallback to old logic only if word_count is somehow null
+    if article_db_obj.word_count is None and article_db_obj.scraped_text_content and \
+       not article_db_obj.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX) and \
+       len(article_db_obj.scraped_text_content) < (min_word_count_threshold * 5) and \
+       article_db_obj.full_html_content is not None:
+        logger.warning(f"Article ID {article_db_obj.id} has null word_count, falling back to char count. It has short text content from a previous successful scrape. Skipping automatic re-scrape.")
+        return False
+
     if not article_db_obj.scraped_text_content or not article_db_obj.full_html_content:
         logger.info(f"Article ID {article_db_obj.id} needs scraping: text_content or full_html_content is missing/invalid and not a known failure.")
         return True
@@ -77,9 +85,20 @@ async def get_news_summaries_endpoint(
         search_source_display_parts.append(f"Keyword: '{query.keyword}'")
     search_source_display = " & ".join(search_source_display_parts) if search_source_display_parts else "All Articles"
     db_query = db_query.options(joinedload(database.Article.tags), joinedload(database.Article.feed_source)).order_by(database.Article.published_date.desc().nullslast(), database.Article.id.desc())
+
+    # Get the minimum word count threshold from settings.
+    try:
+        min_word_count_threshold = int(settings_database.get_setting(settings_db, "minimum_word_count", "100"))
+    except (ValueError, TypeError):
+        min_word_count_threshold = 100
+
+    # Apply the word count filter if no other specific filters are active.
+    if not query.feed_source_ids and not query.tag_ids and not query.keyword:
+        db_query = db_query.filter(database.Article.word_count >= min_word_count_threshold)
+
     total_articles_available = db_query.count()
     total_pages = math.ceil(total_articles_available / query.page_size) if query.page_size > 0 else 0
-    current_page_for_slice = max(1, query.page);
+    current_page_for_slice = max(1, query.page)
     if total_pages > 0: current_page_for_slice = min(current_page_for_slice, total_pages)
     offset = (current_page_for_slice - 1) * query.page_size
     articles_from_db = db_query.limit(query.page_size).offset(offset).all()
@@ -99,11 +118,6 @@ async def get_news_summaries_endpoint(
                 summaries_map[summary.article_id] = summary.summary_text
     # --- End Optimization ---
 
-    try:
-        text_length_threshold = int(settings_database.get_setting(settings_db, "minimum_word_count", "100"))
-    except (ValueError, TypeError):
-        text_length_threshold = 100
-
     results_on_page: List[ArticleResult] = []
     articles_needing_ondemand_scrape: List[database.Article] = []
     for article_db_obj in articles_from_db:
@@ -119,18 +133,20 @@ async def get_news_summaries_endpoint(
             "error_message": None,
             "is_summarizable": False # Will be updated below
         }
-        needs_on_demand_scrape = await _should_attempt_scrape(article_db_obj, text_length_threshold)
+        needs_on_demand_scrape = await _should_attempt_scrape(article_db_obj, min_word_count_threshold)
         current_text_content = article_db_obj.scraped_text_content
+        current_word_count = article_db_obj.word_count
         error_parts_for_display = []
+
         if needs_on_demand_scrape:
             articles_needing_ondemand_scrape.append(article_db_obj)
             error_parts_for_display.append("Content pending fresh scrape.")
         elif current_text_content and current_text_content.startswith(SCRAPING_ERROR_PREFIX):
             error_parts_for_display.append(current_text_content)
-        elif current_text_content and len(current_text_content) < text_length_threshold and article_db_obj.full_html_content is not None:
-            error_parts_for_display.append("Content previously scraped but found to be very short.")
+        elif current_word_count is not None and current_word_count < min_word_count_threshold:
+            error_parts_for_display.append(f"Content previously scraped but found to be very short (word count: {current_word_count}).")
 
-        can_process_ai = current_text_content and not current_text_content.startswith(SCRAPING_ERROR_PREFIX) and len(current_text_content) >= text_length_threshold
+        can_process_ai = current_text_content and not current_text_content.startswith(SCRAPING_ERROR_PREFIX) and (current_word_count is not None and current_word_count >= min_word_count_threshold)
         article_result_data["is_summarizable"] = can_process_ai
 
         if error_parts_for_display:
@@ -149,26 +165,33 @@ async def get_news_summaries_endpoint(
                 if not scraper_error_msg_od and sc_doc_od.page_content:
                     art_db_obj_to_process.scraped_text_content = sc_doc_od.page_content
                     art_db_obj_to_process.full_html_content = sc_doc_od.metadata.get('full_html_content')
+                    art_db_obj_to_process.word_count = sc_doc_od.metadata.get('word_count', 0)
                 else:
                     scraper_error_msg_od = scraper_error_msg_od or "On-demand scraper returned no page_content."
                     art_db_obj_to_process.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_od}"
                     art_db_obj_to_process.full_html_content = None
+                    art_db_obj_to_process.word_count = 0
             else:
                 scraper_error_msg_od = "On-demand scraping: No document returned."
                 art_db_obj_to_process.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_od}"
                 art_db_obj_to_process.full_html_content = None
-            db.add(art_db_obj_to_process);
-            try: db.commit(); db.refresh(art_db_obj_to_process)
-            except Exception as e: db.rollback(); logger.error(f"Error committing on-demand scrape for article {art_db_obj_to_process.id}: {e}", exc_info=True)
+                art_db_obj_to_process.word_count = 0
+            db.add(art_db_obj_to_process)
+            try:
+                db.commit()
+                db.refresh(art_db_obj_to_process)
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Error committing on-demand scrape for article {art_db_obj_to_process.id}: {e}", exc_info=True)
             for res_art in results_on_page:
                 if res_art.id == art_db_obj_to_process.id:
                     current_error_parts_after_od_scrape = []
                     if art_db_obj_to_process.scraped_text_content and art_db_obj_to_process.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX):
                         current_error_parts_after_od_scrape.append(art_db_obj_to_process.scraped_text_content)
-                    elif art_db_obj_to_process.scraped_text_content and len(art_db_obj_to_process.scraped_text_content) < text_length_threshold and art_db_obj_to_process.full_html_content is not None:
-                        current_error_parts_after_od_scrape.append("Content scraped but found to be very short.")
+                    elif art_db_obj_to_process.word_count is not None and art_db_obj_to_process.word_count < min_word_count_threshold:
+                        current_error_parts_after_od_scrape.append(f"Content scraped but found to be very short (word count: {art_db_obj_to_process.word_count}).")
 
-                    res_art.is_summarizable = art_db_obj_to_process.scraped_text_content and not art_db_obj_to_process.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX) and len(art_db_obj_to_process.scraped_text_content) >= text_length_threshold
+                    res_art.is_summarizable = art_db_obj_to_process.scraped_text_content and not art_db_obj_to_process.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX) and (art_db_obj_to_process.word_count is not None and art_db_obj_to_process.word_count >= min_word_count_threshold)
 
                     if not res_art.summary:
                          latest_s = db.query(database.Summary).filter(database.Summary.article_id == res_art.id).order_by(database.Summary.created_at.desc()).first()
@@ -190,15 +213,16 @@ async def regenerate_article_summary(
     if not llm_summary: raise HTTPException(status_code=503, detail="Summarization LLM not available.")
 
     try:
-        text_length_threshold = int(settings_database.get_setting(settings_db, "minimum_word_count", "100"))
+        min_word_count_threshold = int(settings_database.get_setting(settings_db, "minimum_word_count", "100"))
     except (ValueError, TypeError):
-        text_length_threshold = 100
+        min_word_count_threshold = 100
 
     article_db = db.query(database.Article).options(joinedload(database.Article.tags), joinedload(database.Article.feed_source)).filter(database.Article.id == article_id).first()
     if not article_db: raise HTTPException(status_code=404, detail="Article not found.")
     logger.info(f"API Call: Regenerate summary for Article ID {article_id}. Force re-scrape if content is missing/error/short.")
     current_text_content = article_db.scraped_text_content
-    force_scrape_needed = (not current_text_content or current_text_content.startswith(SCRAPING_ERROR_PREFIX) or current_text_content.startswith(CONTENT_ERROR_PREFIX) or (len(current_text_content) < text_length_threshold and article_db.full_html_content is not None) or not article_db.full_html_content )
+    current_word_count = article_db.word_count
+    force_scrape_needed = (not current_text_content or current_text_content.startswith(SCRAPING_ERROR_PREFIX) or current_text_content.startswith(CONTENT_ERROR_PREFIX) or (current_word_count is not None and current_word_count < min_word_count_threshold) or not article_db.full_html_content)
     if force_scrape_needed:
         logger.info(f"API Regenerate: Content for Article ID {article_id} requires re-scraping for regeneration.")
         scraped_docs_list_regen: List[LangchainDocument] = await scraper.scrape_urls([str(article_db.url)])
@@ -209,12 +233,16 @@ async def regenerate_article_summary(
             if not scraper_error_msg_regen and sc_doc_regen.page_content:
                 article_db.scraped_text_content = sc_doc_regen.page_content
                 article_db.full_html_content = sc_doc_regen.metadata.get('full_html_content')
+                article_db.word_count = sc_doc_regen.metadata.get('word_count', 0)
                 current_text_content = article_db.scraped_text_content
+                current_word_count = article_db.word_count
                 db.add(article_db)
                 logger.info(f"API Regenerate: Successfully re-scraped content for Article ID {article_id}.")
             else:
                 scraper_error_msg_regen = scraper_error_msg_regen or "Failed to re-scrape content (regen)"
-                article_db.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_regen}"; article_db.full_html_content = None;
+                article_db.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_regen}"
+                article_db.full_html_content = None
+                article_db.word_count = 0
                 current_text_content = article_db.scraped_text_content
                 db.add(article_db)
                 # No commit here, let the transaction fail and be handled by FastAPI/Starlette
@@ -222,17 +250,19 @@ async def regenerate_article_summary(
                 raise HTTPException(status_code=500, detail=f"Failed to get valid content for regeneration: {scraper_error_msg_regen}")
         else:
             scraper_error_msg_regen = "Failed to re-scrape: No document returned."
-            article_db.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_regen}"; article_db.full_html_content = None;
+            article_db.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_regen}"
+            article_db.full_html_content = None
+            article_db.word_count = 0
             current_text_content = article_db.scraped_text_content
             db.add(article_db)
             # No commit here
             logger.error(f"API Regenerate: Failed to re-scrape for Article ID {article_id}: {scraper_error_msg_regen}")
             raise HTTPException(status_code=500, detail=f"Failed to get valid content for regeneration: {scraper_error_msg_regen}")
-    if not current_text_content or current_text_content.startswith(SCRAPING_ERROR_PREFIX) or len(current_text_content) < text_length_threshold:
-        logger.error(f"API Regenerate: Article text content for ID {article_id} is still invalid or too short ('{current_text_content[:100]}...') after potential re-scrape attempt.")
+    if not current_text_content or current_text_content.startswith(SCRAPING_ERROR_PREFIX) or (current_word_count is not None and current_word_count < min_word_count_threshold):
+        logger.error(f"API Regenerate: Article text content for ID {article_id} is still invalid or too short (word count: {current_word_count}) after potential re-scrape attempt.")
         existing_summary_obj = db.query(database.Summary).filter(database.Summary.article_id == article_db.id).order_by(database.Summary.created_at.desc()).first()
         summary_to_return = existing_summary_obj.summary_text if existing_summary_obj else None
-        error_msg_response = f"Cannot regenerate summary: article content is invalid or too short ('{current_text_content[:100]}...')."
+        error_msg_response = f"Cannot regenerate summary: article content is invalid or too short (word count: {current_word_count})."
         return ArticleResult(id=article_db.id, title=article_db.title, url=article_db.url, summary=summary_to_return, publisher=article_db.feed_source.name if article_db.feed_source else article_db.publisher_name, published_date=article_db.published_date, source_feed_url=article_db.feed_source.url if article_db.feed_source else None, tags=[ArticleTagResponse.from_orm(tag) for tag in article_db.tags], error_message=error_msg_response, is_summarizable=False)
 
     lc_doc_for_summary_regen = LangchainDocument(page_content=current_text_content, metadata={"source": str(article_db.url), "id": article_db.id})
@@ -242,7 +272,7 @@ async def regenerate_article_summary(
     model_name = settings_database.get_setting(settings_db, "summary_model_name", app_config.DEFAULT_SUMMARY_MODEL_NAME)
     new_summary_db_obj = database.Summary(article_id=article_id, summary_text=new_summary_text, prompt_used=prompt_to_use, model_used=model_name)
     db.add(new_summary_db_obj)
-    if request_body.regenerate_tags and llm_tag and current_text_content and not current_text_content.startswith(SCRAPING_ERROR_PREFIX) and len(current_text_content) >= text_length_threshold :
+    if request_body.regenerate_tags and llm_tag and current_text_content and not current_text_content.startswith(SCRAPING_ERROR_PREFIX) and (current_word_count is not None and current_word_count >= min_word_count_threshold):
         logger.info(f"API Regenerate: Regenerating tags for Article ID {article_id}.")
         if article_db.tags:
             article_db.tags.clear()

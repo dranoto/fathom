@@ -105,22 +105,6 @@ export function setCurrentChatHistory(history) {
     currentChatHistory = Array.isArray(history) ? history : [];
 }
 
-/**
- * Sets the API endpoint URLs in the state.
- * @param {string} summariesEndpoint - The new endpoint for summaries.
- * @param {string} chatBaseEndpoint - The new base endpoint for chat.
- */
-export function setApiEndpoints(summariesEndpoint, chatBaseEndpoint) {
-    if (typeof summariesEndpoint === 'string' && summariesEndpoint.trim() !== '') {
-        SUMMARIES_API_ENDPOINT = summariesEndpoint.trim();
-        console.log("State: SUMMARIES_API_ENDPOINT updated to:", SUMMARIES_API_ENDPOINT);
-    }
-    if (typeof chatBaseEndpoint === 'string' && chatBaseEndpoint.trim() !== '') {
-        CHAT_API_ENDPOINT_BASE = chatBaseEndpoint.trim();
-        console.log("State: CHAT_API_ENDPOINT_BASE updated to:", CHAT_API_ENDPOINT_BASE);
-    }
-}
-
 export function setDefaultPrompts(summary, chat, tag) {
     if (summary) defaultSummaryPrompt = summary;
     if (chat) defaultChatPrompt = chat;

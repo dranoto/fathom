@@ -213,15 +213,18 @@ async def fetch_and_store_articles_from_feed(db: Session, feed_source: RSSFeedSo
             text_content_to_save = f"Scraping Error: {scraper_error}" # Or None
             html_content_to_save = None # No reliable HTML if scraping failed badly
 
+        word_count_to_save = scraped_doc.metadata.get('word_count', 0)
+
         new_article = Article(
             feed_source_id=feed_source.id,
             url=article_url,
             title=article_title,
-            publisher_name=feed_source.name or feed_title_from_rss, 
+            publisher_name=feed_source.name or feed_title_from_rss,
             published_date=published_date_dt,
             rss_description=plain_text_description,
-            scraped_text_content=text_content_to_save, # Save extracted text
-            full_html_content=html_content_to_save    # Save extracted HTML
+            scraped_text_content=text_content_to_save,
+            full_html_content=html_content_to_save,
+            word_count=word_count_to_save
         )
         db.add(new_article)
         new_articles_count += 1

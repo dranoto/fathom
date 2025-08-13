@@ -20,6 +20,13 @@ if not logger.hasHandlers():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
+def _count_words(text: str) -> int:
+    """Counts the number of words in a given text string."""
+    if not text:
+        return 0
+    return len(re.findall(r'\b\w+\b', text))
+
+
 async def _extract_content_with_readability(html_content: str, url: str) -> Dict[str, Any]:
     """
     Uses Readability to extract title, text content, and main HTML content.
@@ -49,7 +56,8 @@ async def _extract_content_with_readability(html_content: str, url: str) -> Dict
             metadata_updates["readability_error"] = "Readability extracted no text or HTML content."
             logger.warning(f"Readability found no main content for {url}")
         else:
-            logger.info(f"Readability extracted content for {url}. Text length: {len(metadata_updates['text_content'])}, HTML length: {len(metadata_updates['main_html_content'] or '')}")
+            word_count = _count_words(metadata_updates['text_content'])
+            logger.info(f"Readability extracted content for {url}. Word count: {word_count}, HTML length: {len(metadata_updates['main_html_content'] or '')}")
 
     except Exception as e:
         logger.error(f"Error processing with Readability for {url}: {e}", exc_info=True)
@@ -93,12 +101,15 @@ async def _scrape_single_url_with_playwright_and_readability(page: Page, url: st
         metadata["title"] = scraped_title 
         metadata["full_html_content"] = main_html_content 
 
-        if not page_text_content or len(page_text_content) < 100: 
-            msg = f"Extracted text content too short (<100 chars) or empty for {url} after Readability. Length: {len(page_text_content or '')}"
+        word_count = _count_words(page_text_content)
+        metadata["word_count"] = word_count
+
+        if not page_text_content or word_count < 50:
+            msg = f"Extracted text content too short (<50 words) or empty for {url} after Readability. Word count: {word_count}"
             logger.warning(msg)
             metadata["error"] = (metadata.get("error", "") + " | " + msg).strip(" | ")
         else:
-            logger.info(f"Successfully processed with Readability: {url} (Final Text Length: {len(page_text_content)})")
+            logger.info(f"Successfully processed with Readability: {url} (Final Word Count: {word_count})")
 
     except Exception as e:
         error_msg = f"General Playwright/Readability failure for {url}: {type(e).__name__} - {str(e)}"

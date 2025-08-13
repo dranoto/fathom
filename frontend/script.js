@@ -165,28 +165,9 @@ async function initializeAppSettings() {
         const initialBackendConfig = await apiService.fetchInitialConfigData();
         console.log("MainScript: Initial backend config fetched:", initialBackendConfig);
         
-        // configManager.loadConfigurations will use state.setApiEndpoints internally
+        // configManager.loadConfigurations now handles setting API endpoints in apiService
         configManager.loadConfigurations(initialBackendConfig); 
         
-        // Safeguard: Ensure SUMMARIES_API_ENDPOINT is the new one after config loading.
-        // This is important if localStorage holds an old value or if backend default wasn't updated.
-        if (state.SUMMARIES_API_ENDPOINT === '/api/get-news-summaries') {
-            console.warn(`MainScript: SUMMARIES_API_ENDPOINT was found to be the old default '/api/get-news-summaries'. 
-                          Updating to '/api/articles/summaries'. 
-                          Please ensure your localStorage ('newsSummariesApiEndpoint') 
-                          and backend's initial-config default for summaries API are updated if this message repeats.`);
-            
-            state.setApiEndpoints('/api/articles/summaries', state.CHAT_API_ENDPOINT_BASE); // Use the setter
-            
-            // If loaded from localStorage, update it too so it's correct next time
-            if(localStorage.getItem('newsSummariesApiEndpoint') === '/api/get-news-summaries'){
-                localStorage.setItem('newsSummariesApiEndpoint', '/api/articles/summaries');
-            }
-            // Re-update UI in setup tab if it was based on the old value from localStorage
-            configManager.updateSetupUI(); 
-        }
-
-
         state.setDbFeedSources(initialBackendConfig.all_db_feed_sources || []);
 
         // With feeds loaded from initial-config, we can now render them directly from state

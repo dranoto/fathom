@@ -54,6 +54,10 @@ export function initializeDOMReferences() {
 export function loadConfigurations(initialBackendConfig) {
     console.log("ConfigManager: Loading configurations from backend...");
 
+    // Set API endpoints in the apiService module.
+    // This breaks the circular dependency between apiService and state.
+    apiService.setApiEndpoints(state.SUMMARIES_API_ENDPOINT, state.CHAT_API_ENDPOINT_BASE);
+
     if (!initialBackendConfig || !initialBackendConfig.settings) {
         console.error("ConfigManager: Initial backend config is missing or invalid.", initialBackendConfig);
         return;
