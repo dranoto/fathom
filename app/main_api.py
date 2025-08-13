@@ -104,13 +104,7 @@ async def startup_event():
                 if 'generateContent' in model.supported_actions
             ])
             logger.info(f"MAIN_API: Successfully fetched and filtered {len(app.state.available_models)} text-generation models.")
-
-            # For now, we will proceed without the broken filter.
-            # This will let the app start, but the model list may be imperfect.
-            app.state.available_models = sorted([model.name for model in all_models_list])
-            logger.info(f"MAIN_API: Successfully fetched {len(app.state.available_models)} models (unfiltered).")
-
-
+            
             # --- The rest of your LLM instance initialization follows ---
             # (This part of your code was likely okay, but ensure it uses the fetched model names)
 
