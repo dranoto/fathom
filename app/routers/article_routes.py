@@ -240,12 +240,15 @@ async def regenerate_article_summary(
                 if not tag_name_cleaned: continue
                 tag_db_obj = db.query(database.Tag).filter(database.Tag.name == tag_name_cleaned).first()
                 if not tag_db_obj:
-                    tag_db_obj = database.Tag(name=tag_name_cleaned)
-                    db.add(tag_db_obj)
                     try:
-                        db.flush() # Flush to get potential IntegrityError
+                        # Use a nested transaction (SAVEPOINT) to handle potential race conditions
+                        # for tag creation without rolling back the entire transaction.
+                        with db.begin_nested():
+                            tag_db_obj = database.Tag(name=tag_name_cleaned)
+                            db.add(tag_db_obj)
                     except IntegrityError:
-                        db.rollback() # Rollback the single tag addition
+                        # The nested transaction is automatically rolled back on error.
+                        # The main transaction is still active. We can now safely query for the existing tag.
                         tag_db_obj = db.query(database.Tag).filter(database.Tag.name == tag_name_cleaned).first()
                 if tag_db_obj and tag_db_obj not in article_db.tags:
                     article_db.tags.append(tag_db_obj)
