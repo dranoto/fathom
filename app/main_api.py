@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse
 
 # Langchain and LLM related imports
 from langchain_google_genai import GoogleGenerativeAI
-import google.generativeai as genai
+import google.genai as genai
 
 # APScheduler imports
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
