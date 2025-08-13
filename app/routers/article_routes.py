@@ -91,7 +91,7 @@ def _create_article_result(
         created_at=article_db_obj.created_at,
         source_feed_url=article_db_obj.feed_source.url if article_db_obj.feed_source else None,
         tags=[ArticleTagResponse.from_orm(tag) for tag in article_db_obj.tags],
-        is_favorite=article_db_obj.is_favorite,
+        is_favorite=article_db_obj.is_favorite or False,
         is_summarizable=is_summarizable,
         error_message=error_message
     )
