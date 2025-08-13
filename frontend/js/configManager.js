@@ -4,20 +4,17 @@ import * as apiService from './apiService.js';
 
 /**
  * This module handles loading, saving, and applying application configurations.
- * It interacts with localStorage for persistence and updates the UI in the setup tab.
+ * It now exclusively interacts with the backend for settings persistence.
  */
 
 // --- DOM Element References for the Setup Tab ---
 let numArticlesSetupInput, currentNumArticlesDisplay,
-    apiUrlInput, currentApiUrlDisplay,
-    chatApiUrlInput, currentChatApiUrlDisplay,
     summaryPromptInput, currentSummaryPromptDisplay,
     tagGenerationPromptInput, currentTagGenerationPromptDisplay,
     chatPromptInput, currentChatPromptDisplay,
     rssFetchIntervalInput, currentRssFetchIntervalDisplay,
-    contentPrefsForm, apiEndpointForm, aiPromptsForm, globalRssSettingsForm, resetPromptsBtn,
+    contentPrefsForm, aiPromptsForm, globalRssSettingsForm, resetPromptsBtn,
     aiModelsForm, summaryModelSelect, chatModelSelect, tagModelSelect;
-
 
 /**
  * Initializes the configuration manager by fetching DOM elements.
@@ -25,10 +22,6 @@ let numArticlesSetupInput, currentNumArticlesDisplay,
 export function initializeDOMReferences() {
     numArticlesSetupInput = document.getElementById('num_articles_setup');
     currentNumArticlesDisplay = document.getElementById('current-num-articles-display');
-    apiUrlInput = document.getElementById('api-url');
-    currentApiUrlDisplay = document.getElementById('current-api-url-display');
-    chatApiUrlInput = document.getElementById('chat-api-url');
-    currentChatApiUrlDisplay = document.getElementById('current-chat-api-url-display');
     summaryPromptInput = document.getElementById('summary-prompt-input');
     currentSummaryPromptDisplay = document.getElementById('current-summary-prompt-display');
     tagGenerationPromptInput = document.getElementById('tag-generation-prompt-input');
@@ -39,7 +32,6 @@ export function initializeDOMReferences() {
     currentRssFetchIntervalDisplay = document.getElementById('current-rss-fetch-interval-display');
 
     contentPrefsForm = document.getElementById('content-prefs-form');
-    apiEndpointForm = document.getElementById('api-endpoint-form');
     aiPromptsForm = document.getElementById('ai-prompts-form');
     globalRssSettingsForm = document.getElementById('global-rss-settings-form');
     resetPromptsBtn = document.getElementById('reset-prompts-btn');
@@ -49,74 +41,36 @@ export function initializeDOMReferences() {
     chatModelSelect = document.getElementById('chat-model-select');
     tagModelSelect = document.getElementById('tag-model-select');
 
-
     console.log("ConfigManager: DOM references initialized.");
 }
 
-
 /**
- * Loads all configurations from localStorage and applies them to the state.
- * Also updates the UI elements in the setup tab.
- * @param {object} initialBackendConfig - Config data fetched from the backend (e.g., default prompts).
+ * Loads all configurations from the backend and applies them to the state.
+ * @param {object} initialBackendConfig - Config data fetched from the backend.
  */
 export function loadConfigurations(initialBackendConfig) {
-    console.log("ConfigManager: Loading configurations...");
+    console.log("ConfigManager: Loading configurations from backend...");
 
-    const storedArticlesPerPage = localStorage.getItem('articlesPerPage');
-    if (storedArticlesPerPage) {
-        state.setArticlesPerPage(parseInt(storedArticlesPerPage));
-    } else if (initialBackendConfig && initialBackendConfig.default_articles_per_page) {
-        state.setArticlesPerPage(initialBackendConfig.default_articles_per_page);
+    if (!initialBackendConfig || !initialBackendConfig.settings) {
+        console.error("ConfigManager: Initial backend config is missing or invalid.", initialBackendConfig);
+        return;
     }
 
-    const storedSummariesEndpoint = localStorage.getItem('newsSummariesApiEndpoint');
-    const storedChatEndpointFullPath = localStorage.getItem('newsChatApiEndpoint'); // This was the full path
-    
-    let chatApiBase = initialBackendConfig.default_chat_api_base || '/api'; 
-    if (storedChatEndpointFullPath) {
-        chatApiBase = storedChatEndpointFullPath.endsWith('/chat-with-article') 
-            ? storedChatEndpointFullPath.substring(0, storedChatEndpointFullPath.lastIndexOf('/')) 
-            : storedChatEndpointFullPath;
-        if (!chatApiBase) chatApiBase = '/api'; 
-    }
-    
-    // Use the setter function from state.js
-    state.setApiEndpoints(
-        storedSummariesEndpoint || initialBackendConfig.default_summaries_api_endpoint || '/api/articles/summaries', // Ensure default is correct
-        chatApiBase
-    );
+    const settings = initialBackendConfig.settings;
 
+    // Set state from backend settings
+    state.setArticlesPerPage(settings.articles_per_page);
+    state.setGlobalRssFetchInterval(settings.rss_fetch_interval_minutes);
 
-    state.setDefaultPrompts(
-        initialBackendConfig.default_summary_prompt,
-        initialBackendConfig.default_chat_prompt,
-        initialBackendConfig.default_tag_generation_prompt
-    );
-    state.setCurrentPrompts(
-        localStorage.getItem('customSummaryPrompt') || state.defaultSummaryPrompt,
-        localStorage.getItem('customChatPrompt') || state.defaultChatPrompt,
-        localStorage.getItem('customTagGenerationPrompt') || state.defaultTagGenerationPrompt
-    );
+    // Set prompts
+    state.setDefaultPrompts(settings.summary_prompt, settings.chat_prompt, settings.tag_generation_prompt);
+    state.setCurrentPrompts(settings.summary_prompt, settings.chat_prompt, settings.tag_generation_prompt);
 
+    // Set models
     state.setAvailableModels(initialBackendConfig.available_models);
-    state.setDefaultModels(
-        initialBackendConfig.summary_model_name,
-        initialBackendConfig.chat_model_name,
-        initialBackendConfig.tag_model_name
-    );
-    state.setCurrentModels(
-        localStorage.getItem('currentSummaryModel') || state.defaultSummaryModel,
-        localStorage.getItem('currentChatModel') || state.defaultChatModel,
-        localStorage.getItem('currentTagModel') || state.defaultTagModel
-    );
+    state.setDefaultModels(settings.summary_model_name, settings.chat_model_name, settings.tag_model_name);
+    state.setCurrentModels(settings.summary_model_name, settings.chat_model_name, settings.tag_model_name);
 
-    const storedGlobalRssInterval = localStorage.getItem('globalRssFetchInterval');
-    if (storedGlobalRssInterval) {
-        state.setGlobalRssFetchInterval(parseInt(storedGlobalRssInterval));
-    } else if (initialBackendConfig && initialBackendConfig.default_rss_fetch_interval_minutes) {
-        state.setGlobalRssFetchInterval(initialBackendConfig.default_rss_fetch_interval_minutes);
-    }
-    
     updateSetupUI();
     console.log("ConfigManager: Configurations loaded and UI updated.");
 }
@@ -144,28 +98,21 @@ function populateModelDropdowns() {
     });
 }
 
-
 /**
  * Updates the input fields and display elements in the Setup Tab with current configuration values.
  */
 export function updateSetupUI() {
-    if (!numArticlesSetupInput) { 
-        console.warn("ConfigManager: updateSetupUI called before DOM references were initialized. Call initializeDOMReferences first.");
-        initializeDOMReferences(); 
-        if(!numArticlesSetupInput) { 
-            console.error("ConfigManager: DOM elements for setup UI not found even after re-init. Cannot update UI.");
+    if (!numArticlesSetupInput) {
+        console.warn("ConfigManager: updateSetupUI called before DOM references were initialized.");
+        initializeDOMReferences();
+        if(!numArticlesSetupInput) {
+            console.error("ConfigManager: DOM elements for setup UI not found even after re-init.");
             return;
         }
     }
 
     if (numArticlesSetupInput) numArticlesSetupInput.value = state.articlesPerPage;
     if (currentNumArticlesDisplay) currentNumArticlesDisplay.textContent = state.articlesPerPage;
-
-    if (apiUrlInput) apiUrlInput.value = state.SUMMARIES_API_ENDPOINT;
-    if (currentApiUrlDisplay) currentApiUrlDisplay.textContent = state.SUMMARIES_API_ENDPOINT;
-    
-    if (chatApiUrlInput) chatApiUrlInput.value = `${state.CHAT_API_ENDPOINT_BASE}/chat-with-article`;
-    if (currentChatApiUrlDisplay) currentChatApiUrlDisplay.textContent = `${state.CHAT_API_ENDPOINT_BASE}/chat-with-article`;
 
     if (summaryPromptInput) summaryPromptInput.value = state.currentSummaryPrompt;
     if (currentSummaryPromptDisplay) currentSummaryPromptDisplay.textContent = state.currentSummaryPrompt;
@@ -183,55 +130,51 @@ export function updateSetupUI() {
 }
 
 /**
- * Saves the "Articles per Page" setting.
+ * Gathers all current settings from the state and sends them to the backend.
  */
-export function saveArticlesPerPage(count, callback) {
-    const newArticlesPerPage = parseInt(count);
-    if (newArticlesPerPage >= 1 && newArticlesPerPage <= 50) { 
-        state.setArticlesPerPage(newArticlesPerPage);
-        localStorage.setItem('articlesPerPage', newArticlesPerPage.toString());
-        updateSetupUI();
-        alert('Content preferences saved! Articles per page set to ' + newArticlesPerPage);
-        state.setCurrentPage(1); 
-        if (callback && typeof callback === 'function') {
-            callback(); 
-        }
-    } else {
-        alert('Please enter a number of articles per page between 1 and 50.');
+async function saveConfiguration() {
+    console.log("ConfigManager: Saving configuration to backend...");
+    try {
+        const settingsToSave = {
+            articles_per_page: state.articlesPerPage,
+            rss_fetch_interval_minutes: state.globalRssFetchInterval,
+            summary_prompt: state.currentSummaryPrompt,
+            chat_prompt: state.currentChatPrompt,
+            tag_generation_prompt: state.currentTagGenerationPrompt,
+            summary_model_name: state.currentSummaryModel,
+            chat_model_name: state.currentChatModel,
+            tag_model_name: state.currentTagModel,
+        };
+
+        const response = await apiService.updateConfig({ settings: settingsToSave });
+
+        // The backend now re-initializes models, so no need to do it here.
+        // We can update the state with the confirmed settings from the response if needed,
+        // but it should already match the local state.
+        console.log("ConfigManager: Save successful.", response);
+        alert('Settings saved successfully!');
+
+    } catch (error) {
+        console.error('Failed to save configuration:', error);
+        alert('Error saving settings. Please check the console for details and refresh the page.');
     }
 }
 
 /**
- * Saves the API endpoint settings.
+ * Saves the "Articles per Page" setting.
  */
-export function saveApiEndpoints(newSummariesApiUrlStr, newChatApiUrlFullPathStr) {
-    let updated = false;
-    const currentSummariesEndpoint = state.SUMMARIES_API_ENDPOINT;
-    const currentChatBase = state.CHAT_API_ENDPOINT_BASE;
-
-    let finalSummariesEndpoint = currentSummariesEndpoint;
-    let finalChatBase = currentChatBase;
-
-    if (newSummariesApiUrlStr && newSummariesApiUrlStr.trim()) {
-        finalSummariesEndpoint = newSummariesApiUrlStr.trim();
-        localStorage.setItem('newsSummariesApiEndpoint', finalSummariesEndpoint);
-        updated = true;
-    }
-    if (newChatApiUrlFullPathStr && newChatApiUrlFullPathStr.trim()) {
-        const fullPath = newChatApiUrlFullPathStr.trim();
-        localStorage.setItem('newsChatApiEndpoint', fullPath); 
-        let chatBase = fullPath;
-        if (chatBase.endsWith('/chat-with-article')) {
-            chatBase = chatBase.substring(0, chatBase.lastIndexOf('/'));
-        }
-        finalChatBase = chatBase || '/api'; 
-        updated = true;
-    }
-
-    if (updated) {
-        state.setApiEndpoints(finalSummariesEndpoint, finalChatBase); // Use setter
+export function saveArticlesPerPage(count, callback) {
+    const newArticlesPerPage = parseInt(count);
+    if (newArticlesPerPage >= 1 && newArticlesPerPage <= 50) {
+        state.setArticlesPerPage(newArticlesPerPage);
         updateSetupUI();
-        alert('API Endpoints updated!');
+        saveConfiguration(); // Persist all settings
+        state.setCurrentPage(1);
+        if (callback && typeof callback === 'function') {
+            callback();
+        }
+    } else {
+        alert('Please enter a number of articles per page between 1 and 50.');
     }
 }
 
@@ -254,48 +197,30 @@ export function saveAiPrompts(newSummaryPrompt, newChatPrompt, newTagGenerationP
         newChatPrompt.trim() || state.defaultChatPrompt,
         newTagGenerationPrompt.trim() || state.defaultTagGenerationPrompt
     );
-
-    localStorage.setItem('customSummaryPrompt', state.currentSummaryPrompt);
-    localStorage.setItem('customChatPrompt', state.currentChatPrompt);
-    localStorage.setItem('customTagGenerationPrompt', state.currentTagGenerationPrompt);
-
     updateSetupUI();
-    alert('AI Prompts saved!');
+    saveConfiguration(); // Persist all settings
 }
-
-export async function saveAiModels(summaryModel, chatModel, tagModel) {
-    try {
-        await apiService.updateConfig({
-            summary_model_name: summaryModel,
-            chat_model_name: chatModel,
-            tag_model_name: tagModel,
-        });
-
-        state.setCurrentModels(summaryModel, chatModel, tagModel);
-        localStorage.setItem('currentSummaryModel', summaryModel);
-        localStorage.setItem('currentChatModel', chatModel);
-        localStorage.setItem('currentTagModel', tagModel);
-
-        updateSetupUI();
-        alert('AI Models saved!');
-    } catch (error) {
-        console.error('Failed to save AI models:', error);
-        alert('Error saving AI models. Please check the console for details.');
-    }
-}
-
 
 /**
- * Resets AI prompts to their default values.
+ * Saves the selected AI models.
+ */
+export async function saveAiModels(summaryModel, chatModel, tagModel) {
+    state.setCurrentModels(summaryModel, chatModel, tagModel);
+    updateSetupUI();
+    await saveConfiguration(); // Persist all settings
+}
+
+/**
+ * Resets AI prompts to their default values from the initial config.
  */
 export function resetAiPromptsToDefaults() {
     if (confirm("Are you sure you want to reset prompts to their default values?")) {
+        // We don't have separate defaults anymore, so we need to reload the config.
+        // A simpler approach is to just re-set them from the initial defaults,
+        // but a full save is better to be consistent.
         state.setCurrentPrompts(state.defaultSummaryPrompt, state.defaultChatPrompt, state.defaultTagGenerationPrompt);
-        localStorage.removeItem('customSummaryPrompt');
-        localStorage.removeItem('customChatPrompt');
-        localStorage.removeItem('customTagGenerationPrompt');
         updateSetupUI();
-        alert('Prompts have been reset to defaults.');
+        saveConfiguration();
     }
 }
 
@@ -304,11 +229,10 @@ export function resetAiPromptsToDefaults() {
  */
 export function saveGlobalRssFetchInterval(interval) {
     const newInterval = parseInt(interval);
-    if (!isNaN(newInterval) && newInterval >= 5) { 
+    if (!isNaN(newInterval) && newInterval >= 5) {
         state.setGlobalRssFetchInterval(newInterval);
-        localStorage.setItem('globalRssFetchInterval', newInterval.toString());
         updateSetupUI();
-        alert(`Default RSS fetch interval preference updated to ${newInterval} minutes. This applies when adding new feeds without a specific interval.`);
+        saveConfiguration();
     } else {
         alert("Please enter a valid interval (minimum 5 minutes).");
     }
@@ -319,50 +243,26 @@ export function saveGlobalRssFetchInterval(interval) {
  */
 export function setupFormEventListeners(callbacks = {}) {
     if (!contentPrefsForm) {
-        console.warn("ConfigManager: Forms not found, cannot attach event listeners. Call initializeDOMReferences first.");
+        console.warn("ConfigManager: Forms not found, cannot attach event listeners.");
         return;
     }
-    if (contentPrefsForm) {
-        contentPrefsForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            if (numArticlesSetupInput) {
-                saveArticlesPerPage(numArticlesSetupInput.value, callbacks.onArticlesPerPageChange);
-            }
-        });
-    }
-    if (apiEndpointForm) {
-        apiEndpointForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            if (apiUrlInput && chatApiUrlInput) {
-                saveApiEndpoints(apiUrlInput.value, chatApiUrlInput.value);
-            }
-        });
-    }
-    if (aiPromptsForm) {
-        aiPromptsForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            if (summaryPromptInput && chatPromptInput && tagGenerationPromptInput) {
-                saveAiPrompts(summaryPromptInput.value, chatPromptInput.value, tagGenerationPromptInput.value);
-            }
-        });
-    }
-    if (resetPromptsBtn) {
-        resetPromptsBtn.addEventListener('click', resetAiPromptsToDefaults);
-    }
-    if (globalRssSettingsForm) {
-        globalRssSettingsForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            if (rssFetchIntervalInput) {
-                saveGlobalRssFetchInterval(rssFetchIntervalInput.value);
-            }
-        });
-    }
-    if (aiModelsForm) {
-        aiModelsForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            saveAiModels(summaryModelSelect.value, chatModelSelect.value, tagModelSelect.value);
-        });
-    }
+    contentPrefsForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        saveArticlesPerPage(numArticlesSetupInput.value, callbacks.onArticlesPerPageChange);
+    });
+    aiPromptsForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        saveAiPrompts(summaryPromptInput.value, chatPromptInput.value, tagGenerationPromptInput.value);
+    });
+    resetPromptsBtn.addEventListener('click', resetAiPromptsToDefaults);
+    globalRssSettingsForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        saveGlobalRssFetchInterval(rssFetchIntervalInput.value);
+    });
+    aiModelsForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        saveAiModels(summaryModelSelect.value, chatModelSelect.value, tagModelSelect.value);
+    });
     console.log("ConfigManager: Setup form event listeners attached.");
 }
 

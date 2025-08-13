@@ -172,36 +172,6 @@ class Tag(Base):
     def __repr__(self):
         return f"<Tag(id={self.id}, name='{self.name}')>"
 
-class Configuration(Base):
-    __tablename__ = "configuration"
-    key = Column(String, primary_key=True, index=True, nullable=False)
-    value = Column(String, nullable=False)
-    def __repr__(self):
-        return f"<Configuration(key='{self.key}', value='{self.value}')>"
-
-# --- Helper functions for Configuration ---
-def get_setting(db: SQLAlchemySession, key: str, default: Optional[str] = None) -> Optional[str]:
-    """
-    Retrieves a setting value from the database.
-    Returns the default value if the key is not found.
-    """
-    setting = db.query(Configuration).filter(Configuration.key == key).first()
-    return setting.value if setting else default
-
-def set_setting(db: SQLAlchemySession, key: str, value: str):
-    """
-    Creates or updates a setting in the database.
-    """
-    setting = db.query(Configuration).filter(Configuration.key == key).first()
-    if setting:
-        setting.value = value
-    else:
-        setting = Configuration(key=key, value=value)
-        db.add(setting)
-    # Note: commit is not called here, it should be handled by the caller
-    # via db_session_scope or other session management.
-
-
 def create_db_and_tables():
     print("DATABASE: Attempting to create database tables...")
     try:

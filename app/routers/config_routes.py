@@ -2,109 +2,144 @@
 import logging
 from fastapi import APIRouter, Depends, Request, HTTPException
 from sqlalchemy.orm import Session as SQLAlchemySession
-from typing import List, Dict, Any # For type hinting
+from typing import List, Dict, Any
 
-# Relative imports for modules within the 'app' directory
-from .. import database # To access get_db and ORM models like RSSFeedSource
-from .. import config as app_config # To access application-level configurations
+# Updated imports to use the new settings_database
+from .. import database, settings_database
+from .. import config as app_config
 from .. import summarizer
-from ..schemas import InitialConfigResponse, UpdateConfigRequest, UpdateConfigResponse # To use the Pydantic model for the response
+from ..schemas import (
+    InitialConfigResponse,
+    UpdateAppSettingsRequest,
+    UpdateAppSettingsResponse,
+    AppSettings
+)
 
-# Initialize logger for this module
 logger = logging.getLogger(__name__)
 
-# Create an APIRouter instance for these configuration-related routes
-# - prefix: a common path prefix for all routes defined in this router
-# - tags: used for grouping routes in the OpenAPI documentation (Swagger UI)
 router = APIRouter(
     prefix="/api",
     tags=["configuration"]
 )
 
 @router.get("/initial-config", response_model=InitialConfigResponse)
-async def get_initial_config_endpoint(request: Request, db: SQLAlchemySession = Depends(database.get_db)):
+async def get_initial_config_endpoint(
+    request: Request,
+    main_db: SQLAlchemySession = Depends(database.get_db),
+    settings_db: SQLAlchemySession = Depends(settings_database.get_db)
+):
     """
     Endpoint to fetch the initial configuration for the frontend.
-    This includes default RSS feeds, all feed sources from the database,
-    default application settings like articles per page, prompts, and
-    details about the browser extension and headless mode.
+    This now separates settings from other app data like feed sources.
     """
     logger.info("API Call: Fetching initial configuration.")
 
-    # Query the database for all RSSFeedSource records, ordered by name
-    db_feeds = db.query(database.RSSFeedSource).order_by(database.RSSFeedSource.name).all()
-
-    # Format the database feed sources into the structure expected by the frontend/Pydantic model
+    # 1. Fetch all feed sources from the main database
+    db_feeds = main_db.query(database.RSSFeedSource).order_by(database.RSSFeedSource.name).all()
     db_feed_sources_response: List[Dict[str, Any]] = [
         {"id": feed.id, "url": feed.url, "name": feed.name, "fetch_interval_minutes": feed.fetch_interval_minutes}
         for feed in db_feeds
     ]
-    logger.debug(f"Found {len(db_feed_sources_response)} feed sources in the database.")
+    logger.debug(f"Found {len(db_feed_sources_response)} feed sources in the main database.")
 
-    summary_model_name = database.get_setting(db, "summary_model_name", app_config.DEFAULT_SUMMARY_MODEL_NAME)
-    chat_model_name = database.get_setting(db, "chat_model_name", app_config.DEFAULT_CHAT_MODEL_NAME)
-    tag_model_name = database.get_setting(db, "tag_model_name", app_config.DEFAULT_TAG_MODEL_NAME)
+    # 2. Fetch all settings from the settings database
+    all_settings = settings_database.get_all_settings(settings_db)
 
-    # Construct and return the InitialConfigResponse object
-    # This uses values from the application's configuration (app_config)
-    # and the data retrieved from the database.
+    # 3. Construct the AppSettings Pydantic model with robust type casting
+    try:
+        articles_per_page = int(all_settings.get("articles_per_page"))
+    except (ValueError, TypeError):
+        articles_per_page = app_config.DEFAULT_PAGE_SIZE
+        logger.warning(f"Invalid 'articles_per_page' value in settings DB. Falling back to default: {articles_per_page}")
+
+    try:
+        rss_fetch_interval_minutes = int(all_settings.get("rss_fetch_interval_minutes"))
+    except (ValueError, TypeError):
+        rss_fetch_interval_minutes = app_config.DEFAULT_RSS_FETCH_INTERVAL_MINUTES
+        logger.warning(f"Invalid 'rss_fetch_interval_minutes' value in settings DB. Falling back to default: {rss_fetch_interval_minutes}")
+
+    app_settings = AppSettings(
+        summary_model_name=all_settings.get("summary_model_name"),
+        chat_model_name=all_settings.get("chat_model_name"),
+        tag_model_name=all_settings.get("tag_model_name"),
+        articles_per_page=articles_per_page,
+        rss_fetch_interval_minutes=rss_fetch_interval_minutes,
+        summary_prompt=all_settings.get("summary_prompt"),
+        chat_prompt=all_settings.get("chat_prompt"),
+        tag_generation_prompt=all_settings.get("tag_generation_prompt"),
+    )
+
+    # 4. Construct and return the main response object
     response_data = InitialConfigResponse(
-        default_rss_feeds=app_config.RSS_FEED_URLS,
+        settings=app_settings,
+        default_rss_feeds=app_config.RSS_FEED_URLS, # This remains from env/config
         all_db_feed_sources=db_feed_sources_response,
-        default_articles_per_page=app_config.DEFAULT_PAGE_SIZE,
-        default_summary_prompt=app_config.DEFAULT_SUMMARY_PROMPT,
-        default_chat_prompt=app_config.DEFAULT_CHAT_PROMPT,
-        default_tag_generation_prompt=app_config.DEFAULT_TAG_GENERATION_PROMPT,
-        default_rss_fetch_interval_minutes=app_config.DEFAULT_RSS_FETCH_INTERVAL_MINUTES,
         path_to_extension=app_config.PATH_TO_EXTENSION,
         use_headless_browser=app_config.USE_HEADLESS_BROWSER,
-        summary_model_name=summary_model_name,
-        chat_model_name=chat_model_name,
-        tag_model_name=tag_model_name,
         available_models=request.app.state.available_models
     )
     logger.info("Successfully prepared initial configuration response.")
     return response_data
 
-@router.put("/config", response_model=UpdateConfigResponse)
-async def update_config_endpoint(request: Request, config_update: UpdateConfigRequest, db: SQLAlchemySession = Depends(database.get_db)):
-    with database.db_session_scope() as db_session:
-        database.set_setting(db_session, "summary_model_name", config_update.summary_model_name)
-        database.set_setting(db_session, "chat_model_name", config_update.chat_model_name)
-        database.set_setting(db_session, "tag_model_name", config_update.tag_model_name)
+@router.put("/config", response_model=UpdateAppSettingsResponse)
+async def update_app_settings_endpoint(
+    request: Request,
+    config_update: UpdateAppSettingsRequest,
+    settings_db: SQLAlchemySession = Depends(settings_database.get_db)
+):
+    """
+    Endpoint to update all application settings.
+    Receives a single object with all settings and saves them to the settings database.
+    """
+    logger.info("API Call: Updating application settings.")
 
-    # Re-initialize LLMs
     try:
+        # 1. Save all settings to the settings database
+        with settings_database.db_session_scope() as db_session:
+            settings_dict = config_update.settings.model_dump()
+            settings_database.set_multiple_settings(db_session, settings_dict)
+
+        logger.info("Successfully saved settings to the database.")
+
+        # 2. Re-initialize LLMs with the new model names
         app = request.app
+        updated_settings = config_update.settings
+
+        # Initialize Summary LLM
         summary_llm = summarizer.initialize_llm(
             api_key=app_config.GEMINI_API_KEY,
-            model_name=config_update.summary_model_name,
+            model_name=updated_settings.summary_model_name,
             temperature=0.2, max_output_tokens=app_config.SUMMARY_MAX_OUTPUT_TOKENS
         )
         if summary_llm:
             app.state.llm_summary_instance = summary_llm
 
+        # Initialize Chat LLM
         chat_llm = summarizer.initialize_llm(
             api_key=app_config.GEMINI_API_KEY,
-            model_name=config_update.chat_model_name,
+            model_name=updated_settings.chat_model_name,
             temperature=0.5, max_output_tokens=app_config.CHAT_MAX_OUTPUT_TOKENS
         )
         if chat_llm:
             app.state.llm_chat_instance = chat_llm
 
+        # Initialize Tag LLM
         tag_llm = summarizer.initialize_llm(
             api_key=app_config.GEMINI_API_KEY,
-            model_name=config_update.tag_model_name,
+            model_name=updated_settings.tag_model_name,
             temperature=0.1, max_output_tokens=app_config.TAG_MAX_OUTPUT_TOKENS
         )
         if tag_llm:
             app.state.llm_tag_instance = tag_llm
 
-        return UpdateConfigResponse(
-            summary_model_name=config_update.summary_model_name,
-            chat_model_name=config_update.chat_model_name,
-            tag_model_name=config_update.tag_model_name
+        logger.info("Successfully re-initialized AI models.")
+
+        # 3. Return a success response with the updated settings
+        return UpdateAppSettingsResponse(
+            message="Settings updated successfully.",
+            settings=updated_settings
         )
+
     except Exception as e:
-        logger.error(f"Error re-initializing LLMs after config update: {e}")
-        raise HTTPException(status_code=500, detail="Failed to re-initialize AI models.")
+        logger.error(f"Error updating application settings: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to update settings: {e}")

@@ -14,7 +14,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 # Relative imports for application modules
-from . import database 
+from . import database, settings_database # Import settings_database
 from . import config as app_config 
 from . import summarizer 
 from . import rss_client 
@@ -27,7 +27,7 @@ from .routers import (
     article_routes,
     chat_routes,
     admin_routes,
-    content_routes # Added import for the new content router
+    content_routes
 )
 
 # Configure basic logging
@@ -35,6 +35,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 # --- Global Variables ---
+# These are less critical now as app.state is the primary carrier, but can be useful for debugging.
 llm_summary_instance_global: GoogleGenerativeAI | None = None
 llm_chat_instance_global: GoogleGenerativeAI | None = None
 llm_tag_instance_global: GoogleGenerativeAI | None = None
@@ -45,7 +46,7 @@ scheduler = AsyncIOScheduler(timezone="UTC")
 # FastAPI application instance
 app = FastAPI(
     title="News Summarizer API & Frontend (Refactored)",
-    version="2.1.0", # Updated version for new feature
+    version="2.2.0", # Updated version for settings refactor
     description="API for fetching, summarizing, tagging, chatting with, and viewing full content of news articles."
 )
 
@@ -55,15 +56,22 @@ async def startup_event():
     global llm_summary_instance_global, llm_chat_instance_global, llm_tag_instance_global, scheduler
     logger.info("MAIN_API: Application startup sequence initiated...")
 
-    # 1. Initialize Database
-    logger.info("MAIN_API: Initializing database tables...")
+    # 1. Initialize Databases
+    logger.info("MAIN_API: Initializing databases...")
     try:
+        # Initialize the main article database
         database.create_db_and_tables()
-        logger.info("MAIN_API: Database tables checked/created successfully.")
+        logger.info("MAIN_API: Main article database tables checked/created successfully.")
+
+        # Initialize the new settings database
+        settings_database.create_settings_db_and_tables()
+        logger.info("MAIN_API: Settings database tables checked/created successfully.")
     except Exception as e:
         logger.critical(f"MAIN_API: CRITICAL ERROR during database initialization: {e}", exc_info=True)
+        # Depending on the error, we might want to exit here.
+        # For now, we'll log it as critical and continue.
 
-    # 2. Add Initial RSS Feeds to DB
+    # 2. Add Initial RSS Feeds to DB (from env vars, if any)
     if app_config.RSS_FEED_URLS:
         logger.info(f"MAIN_API: Ensuring initial RSS feeds are in DB from config: {app_config.RSS_FEED_URLS}")
         try:
@@ -75,24 +83,18 @@ async def startup_event():
     else:
         logger.info("MAIN_API: No initial RSS_FEED_URLS configured in app_config to add to DB.")
 
-    # 3. Initialize LLM Instances and store in app.state
-    logger.info("MAIN_API: Attempting to initialize LLM instances...")
+    # 3. Initialize LLM Instances using settings from the settings DB
+    logger.info("MAIN_API: Attempting to initialize LLM instances from settings DB...")
     if not app_config.GEMINI_API_KEY:
         logger.critical("MAIN_API: CRITICAL ERROR - GEMINI_API_KEY not found. LLM features will be disabled.")
     else:
         try:
-            with database.db_session_scope() as db:
-                summary_model_name = database.get_setting(db, "summary_model_name", app_config.DEFAULT_SUMMARY_MODEL_NAME)
-                chat_model_name = database.get_setting(db, "chat_model_name", app_config.DEFAULT_CHAT_MODEL_NAME)
-                tag_model_name = database.get_setting(db, "tag_model_name", app_config.DEFAULT_TAG_MODEL_NAME)
-
-                # Save default if not present
-                if not database.get_setting(db, "summary_model_name"):
-                    database.set_setting(db, "summary_model_name", summary_model_name)
-                if not database.get_setting(db, "chat_model_name"):
-                    database.set_setting(db, "chat_model_name", chat_model_name)
-                if not database.get_setting(db, "tag_model_name"):
-                    database.set_setting(db, "tag_model_name", tag_model_name)
+            # Use the new settings database to get model names
+            with settings_database.db_session_scope() as settings_db:
+                all_settings = settings_database.get_all_settings(settings_db)
+                summary_model_name = all_settings.get("summary_model_name")
+                chat_model_name = all_settings.get("chat_model_name")
+                tag_model_name = all_settings.get("tag_model_name")
 
             app.state.available_models = [
                 "gemini-1.5-flash-latest",
@@ -105,47 +107,58 @@ async def startup_event():
                 model_name=summary_model_name,
                 temperature=0.2, max_output_tokens=app_config.SUMMARY_MAX_OUTPUT_TOKENS
             )
-            if llm_summary_instance_global:
-                app.state.llm_summary_instance = llm_summary_instance_global
-                logger.info(f"MAIN_API: Summarization LLM ({summary_model_name}) initialized and added to app.state.")
-            else: logger.error("MAIN_API: Summarization LLM failed to initialize.")
+            app.state.llm_summary_instance = llm_summary_instance_global
+            if app.state.llm_summary_instance:
+                logger.info(f"MAIN_API: Summarization LLM ({summary_model_name}) initialized.")
+            else:
+                logger.error(f"MAIN_API: Summarization LLM ({summary_model_name}) FAILED to initialize.")
 
             llm_chat_instance_global = summarizer.initialize_llm(
                 api_key=app_config.GEMINI_API_KEY,
                 model_name=chat_model_name,
                 temperature=0.5, max_output_tokens=app_config.CHAT_MAX_OUTPUT_TOKENS
             )
-            if llm_chat_instance_global:
-                app.state.llm_chat_instance = llm_chat_instance_global
-                logger.info(f"MAIN_API: Chat LLM ({chat_model_name}) initialized and added to app.state.")
-            else: logger.error("MAIN_API: Chat LLM failed to initialize.")
+            app.state.llm_chat_instance = llm_chat_instance_global
+            if app.state.llm_chat_instance:
+                logger.info(f"MAIN_API: Chat LLM ({chat_model_name}) initialized.")
+            else:
+                logger.error(f"MAIN_API: Chat LLM ({chat_model_name}) FAILED to initialize.")
 
             llm_tag_instance_global = summarizer.initialize_llm(
                 api_key=app_config.GEMINI_API_KEY,
                 model_name=tag_model_name,
                 temperature=0.1, max_output_tokens=app_config.TAG_MAX_OUTPUT_TOKENS
             )
-            if llm_tag_instance_global:
-                app.state.llm_tag_instance = llm_tag_instance_global
-                logger.info(f"MAIN_API: Tag Generation LLM ({tag_model_name}) initialized and added to app.state.")
-            else: logger.error("MAIN_API: Tag Generation LLM failed to initialize.")
+            app.state.llm_tag_instance = llm_tag_instance_global
+            if app.state.llm_tag_instance:
+                logger.info(f"MAIN_API: Tag Generation LLM ({tag_model_name}) initialized.")
+            else:
+                logger.error(f"MAIN_API: Tag Generation LLM ({tag_model_name}) FAILED to initialize.")
 
         except Exception as e:
             logger.critical(f"MAIN_API: CRITICAL ERROR during LLM Initialization: {e}.", exc_info=True)
-            llm_summary_instance_global = None
-            llm_chat_instance_global = None
-            llm_tag_instance_global = None
             app.state.llm_summary_instance = None
             app.state.llm_chat_instance = None
             app.state.llm_tag_instance = None
 
-
     # 4. Start APScheduler for RSS Feed Updates
     if not scheduler.running:
-        logger.info(f"MAIN_API: Configuring APScheduler to run RSS feed updates every {app_config.DEFAULT_RSS_FETCH_INTERVAL_MINUTES} minutes.")
+        # Get interval from settings DB, fallback to config
+        with settings_database.db_session_scope() as settings_db:
+            try:
+                interval_minutes = int(settings_database.get_setting(
+                    settings_db,
+                    "rss_fetch_interval_minutes",
+                    str(app_config.DEFAULT_RSS_FETCH_INTERVAL_MINUTES)
+                ))
+            except (ValueError, TypeError):
+                interval_minutes = app_config.DEFAULT_RSS_FETCH_INTERVAL_MINUTES
+                logger.warning(f"Invalid 'rss_fetch_interval_minutes' in settings DB, falling back to default: {interval_minutes}")
+
+        logger.info(f"MAIN_API: Configuring APScheduler to run RSS feed updates every {interval_minutes} minutes.")
         scheduler.add_job(
             tasks.trigger_rss_update_all_feeds,
-            trigger=IntervalTrigger(minutes=app_config.DEFAULT_RSS_FETCH_INTERVAL_MINUTES),
+            trigger=IntervalTrigger(minutes=interval_minutes),
             id="update_all_feeds_job",
             name="Periodic RSS Feed Update",
             replace_existing=True,
@@ -162,6 +175,7 @@ async def startup_event():
         logger.info("MAIN_API: APScheduler is already running.")
 
     logger.info("MAIN_API: Application startup sequence complete.")
+
 
 @app.on_event("shutdown")
 def shutdown_event():
@@ -183,7 +197,7 @@ app.include_router(feed_routes.router)
 app.include_router(article_routes.router)
 app.include_router(chat_routes.router)
 app.include_router(admin_routes.router)
-app.include_router(content_routes.router) # Added the new content_routes router
+app.include_router(content_routes.router)
 logger.info("MAIN_API: All API routers included.")
 
 # --- Static Files & Root Endpoint ---
