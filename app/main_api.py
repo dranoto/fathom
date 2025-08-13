@@ -111,8 +111,8 @@ async def startup_event():
                 # This is a safety net in case the API list changes or a user has an old model name saved.
                 # It ensures that any model name already saved in the database is present in the list.
                 saved_models = {summary_model_name, chat_model_name, tag_model_name}
-                for model_name in saved_models:
-                    if model_name and model_name not in app.state.available_models:
+                for model_name in sorted(m for m in saved_models if m):
+                    if model_name not in app.state.available_models:
                         app.state.available_models.insert(0, model_name)
                         logger.warning(f"MAIN_API: Saved model '{model_name}' not found in fetched list; adding it to the top to ensure availability.")
 
