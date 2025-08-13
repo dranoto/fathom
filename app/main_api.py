@@ -10,8 +10,8 @@ from fastapi.responses import FileResponse
 from langchain_google_genai import GoogleGenerativeAI
 
 # This is for direct Google API access (e.g., listing models, configuring keys)
+import google.api_core.exceptions
 from google import genai
-from google.genai import types
 
 # APScheduler imports
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -93,40 +93,34 @@ async def startup_event():
         logger.critical("MAIN_API: CRITICAL ERROR - GEMINI_API_KEY not found. LLM features will be disabled.")
     else:
         try:
-            # Use the new settings database to get model names
+            # Step 1: Initialize the client. This replaces the old genai.configure().
+            client = genai.Client(api_key=app_config.GEMINI_API_KEY)
+            app.state.google_ai_client = client # Store the client for later use
+            logger.info("MAIN_API: Google AI Client initialized successfully.")
+
+            # Step 2: Use the client object to list models.
+            app.state.available_models = sorted([
+                model.name for model in client.list_models()
+                if 'generateContent' in model.supported_generation_methods
+            ])
+            logger.info(f"MAIN_API: Successfully fetched {len(app.state.available_models)} available models.")
+
+            # --- The rest of your LLM instance initialization follows ---
+            # (This part of your code was likely okay, but ensure it uses the fetched model names)
+
             with settings_database.db_session_scope() as settings_db:
                 all_settings = settings_database.get_all_settings(settings_db)
                 summary_model_name = all_settings.get("summary_model_name")
                 chat_model_name = all_settings.get("chat_model_name")
                 tag_model_name = all_settings.get("tag_model_name")
 
-            # Programmatically fetch available models
-            try:
-                genai.configure(api_key=app_config.GEMINI_API_KEY)
-                # Filter for models that support 'generateContent' and are text-based.
-                # The 'models/' prefix is common for Gemini models.
-                app.state.available_models = sorted([
-                    model.name for model in genai.list_models()
-                    if 'generateContent' in model.supported_generation_methods and 'models/' in model.name
-                ])
-                logger.info(f"MAIN_API: Successfully fetched {len(app.state.available_models)} available models from Google AI.")
-
-                # This is a safety net in case the API list changes or a user has an old model name saved.
-                # It ensures that any model name already saved in the database is present in the list.
-                saved_models = {summary_model_name, chat_model_name, tag_model_name}
-                for model_name in sorted(m for m in saved_models if m):
-                    if model_name not in app.state.available_models:
-                        app.state.available_models.insert(0, model_name)
-                        logger.warning(f"MAIN_API: Saved model '{model_name}' not found in fetched list; adding it to the top to ensure availability.")
-
-            except google.api_core.exceptions.GoogleAPICallError as e:
-                logger.error(f"MAIN_API: Failed to fetch models from Google AI: {e}. Falling back to a default list.")
-                # Fallback to a default list in case of API failure
-                app.state.available_models = [
-                    "gemini-1.5-flash-latest",
-                    "gemini-1.5-pro-latest",
-                    "gemini-1.0-pro",
-                ]
+            # This is a safety net in case the API list changes or a user has an old model name saved.
+            # It ensures that any model name already saved in the database is present in the list.
+            saved_models = {summary_model_name, chat_model_name, tag_model_name}
+            for model_name in sorted(m for m in saved_models if m):
+                if model_name not in app.state.available_models:
+                    app.state.available_models.insert(0, model_name)
+                    logger.warning(f"MAIN_API: Saved model '{model_name}' not found in fetched list; adding it to the top to ensure availability.")
 
             llm_summary_instance_global = summarizer.initialize_llm(
                 api_key=app_config.GEMINI_API_KEY,
@@ -161,8 +155,11 @@ async def startup_event():
             else:
                 logger.error(f"MAIN_API: Tag Generation LLM ({tag_model_name}) FAILED to initialize.")
 
+        except google.api_core.exceptions.GoogleAPICallError as e:
+            logger.error(f"MAIN_API: Failed to fetch models from Google AI: {e}. Falling back to default list.")
+            app.state.available_models = ["gemini-1.5-flash-latest", "gemini-1.5-pro-latest"]
         except Exception as e:
-            logger.critical(f"MAIN_API: CRITICAL ERROR during LLM Initialization: {e}.", exc_info=True)
+            logger.critical(f"MAIN_API: A critical error occurred during Google AI Client Initialization: {e}", exc_info=True)
             app.state.llm_summary_instance = None
             app.state.llm_chat_instance = None
             app.state.llm_tag_instance = None
