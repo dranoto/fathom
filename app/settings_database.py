@@ -120,9 +120,10 @@ def create_settings_db_and_tables():
         print("SETTINGS_DB: Settings database tables checked/created successfully.")
 
         with db_session_scope() as db:
+            # Fetch keys that are already in the DB to avoid adding them again
+            existing_keys = {s.key for s in db.query(Configuration.key).all()}
             for key, value in DEFAULT_SETTINGS.items():
-                existing_setting = db.query(Configuration).filter(Configuration.key == key).first()
-                if not existing_setting:
+                if key not in existing_keys:
                     print(f"SETTINGS_DB: Initializing default setting for '{key}'.")
                     new_setting = Configuration(key=key, value=str(value))
                     db.add(new_setting)
