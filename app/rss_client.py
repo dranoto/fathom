@@ -184,11 +184,11 @@ async def fetch_and_store_articles_from_feed(db: Session, feed_source: RSSFeedSo
         # Fallback to the 'content' field if summary/description are missing.
         # feedparser can return 'content' as a list of content objects.
         if not raw_description and 'content' in feed_entry_data:
-            if isinstance(feed_entry_data['content'], list) and len(feed_entry_data['content']) > 0:
-                # The content object typically has a 'value' attribute.
+            if isinstance(feed_entry_data['content'], list) and feed_entry_data['content']:
+                # feedparser content is a list of dicts, each with a 'value' key.
                 content_block = feed_entry_data['content'][0]
-                if hasattr(content_block, 'value'):
-                    raw_description = content_block.value
+                if isinstance(content_block, dict) and 'value' in content_block:
+                    raw_description = content_block['value']
 
         plain_text_description = None
         if raw_description:
