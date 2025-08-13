@@ -136,11 +136,15 @@ async def startup_event():
     if not scheduler.running:
         # Get interval from settings DB, fallback to config
         with settings_database.db_session_scope() as settings_db:
-             interval_minutes = int(settings_database.get_setting(
-                 settings_db,
-                 "rss_fetch_interval_minutes",
-                 str(app_config.DEFAULT_RSS_FETCH_INTERVAL_MINUTES)
-             ))
+            try:
+                interval_minutes = int(settings_database.get_setting(
+                    settings_db,
+                    "rss_fetch_interval_minutes",
+                    str(app_config.DEFAULT_RSS_FETCH_INTERVAL_MINUTES)
+                ))
+            except (ValueError, TypeError):
+                interval_minutes = app_config.DEFAULT_RSS_FETCH_INTERVAL_MINUTES
+                logger.warning(f"Invalid 'rss_fetch_interval_minutes' in settings DB, falling back to default: {interval_minutes}")
 
         logger.info(f"MAIN_API: Configuring APScheduler to run RSS feed updates every {interval_minutes} minutes.")
         scheduler.add_job(

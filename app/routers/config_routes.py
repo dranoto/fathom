@@ -45,14 +45,25 @@ async def get_initial_config_endpoint(
     # 2. Fetch all settings from the settings database
     all_settings = settings_database.get_all_settings(settings_db)
 
-    # 3. Construct the AppSettings Pydantic model
-    # The get_all_settings function ensures that defaults are present.
+    # 3. Construct the AppSettings Pydantic model with robust type casting
+    try:
+        articles_per_page = int(all_settings.get("articles_per_page"))
+    except (ValueError, TypeError):
+        articles_per_page = app_config.DEFAULT_PAGE_SIZE
+        logger.warning(f"Invalid 'articles_per_page' value in settings DB. Falling back to default: {articles_per_page}")
+
+    try:
+        rss_fetch_interval_minutes = int(all_settings.get("rss_fetch_interval_minutes"))
+    except (ValueError, TypeError):
+        rss_fetch_interval_minutes = app_config.DEFAULT_RSS_FETCH_INTERVAL_MINUTES
+        logger.warning(f"Invalid 'rss_fetch_interval_minutes' value in settings DB. Falling back to default: {rss_fetch_interval_minutes}")
+
     app_settings = AppSettings(
         summary_model_name=all_settings.get("summary_model_name"),
         chat_model_name=all_settings.get("chat_model_name"),
         tag_model_name=all_settings.get("tag_model_name"),
-        articles_per_page=int(all_settings.get("articles_per_page")),
-        rss_fetch_interval_minutes=int(all_settings.get("rss_fetch_interval_minutes")),
+        articles_per_page=articles_per_page,
+        rss_fetch_interval_minutes=rss_fetch_interval_minutes,
         summary_prompt=all_settings.get("summary_prompt"),
         chat_prompt=all_settings.get("chat_prompt"),
         tag_generation_prompt=all_settings.get("tag_generation_prompt"),
