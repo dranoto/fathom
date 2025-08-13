@@ -249,15 +249,20 @@ async def update_all_subscribed_feeds(db: Session):
             should_fetch = True
             logger.info(f"RSS_CLIENT_SCHEDULER: Feed '{feed.name}' (ID: {feed.id}) never fetched. Adding to update queue.")
         else:
-            last_fetched_aware = feed.last_fetched_at
-            if last_fetched_aware.tzinfo is None or last_fetched_aware.tzinfo.utcoffset(last_fetched_aware) is None:
-                logger.warning(f"RSS_CLIENT_SCHEDULER: Warning - Feed '{feed.name}' (ID: {feed.id}) has an offset-naive last_fetched_at ('{last_fetched_aware}'). Assuming UTC.")
-                last_fetched_aware = last_fetched_aware.replace(tzinfo=timezone.utc)
+            last_fetched = feed.last_fetched_at
             
+            # Ensure the datetime is timezone-aware. This is crucial for correct comparison.
+            if last_fetched.tzinfo is None or last_fetched.tzinfo.utcoffset(last_fetched) is None:
+                # Naive datetime objects from the DB are assumed to be in UTC.
+                last_fetched_aware = last_fetched.replace(tzinfo=timezone.utc)
+            else:
+                last_fetched_aware = last_fetched
+
             fetch_time_cutoff = now_aware - timedelta(minutes=feed.fetch_interval_minutes)
+
             if last_fetched_aware < fetch_time_cutoff:
                 should_fetch = True
-                logger.info(f"RSS_CLIENT_SCHEDULER: Feed '{feed.name}' (ID: {feed.id}) due for update. Last fetched: {last_fetched_aware}, Cutoff: {fetch_time_cutoff}. Adding to queue.")
+                logger.info(f"RSS_CLIENT_SCHEDULER: Feed '{feed.name}' (ID: {feed.id}) due for update. Last fetched: {last_fetched_aware} vs Cutoff: {fetch_time_cutoff}. Adding to queue.")
         
         if should_fetch:
             feeds_to_update.append(feed)
