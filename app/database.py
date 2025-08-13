@@ -1,6 +1,6 @@
 # app/database.py
 import os
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey, UniqueConstraint, Index, Table, inspect
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey, UniqueConstraint, Index, Table, inspect, Boolean
 from sqlalchemy.orm import sessionmaker, Session as SQLAlchemySession, relationship, declarative_base # Mapped, mapped_column for newer SQLAlchemy
 from sqlalchemy.sql import func, text
 from contextlib import contextmanager
@@ -112,6 +112,9 @@ class Article(Base):
     # NEW FIELD: To store the word count of the scraped text content.
     word_count = Column(Integer, nullable=True, index=True)
 
+    # NEW FIELD: For favoriting articles
+    is_favorite = Column(Boolean, default=False, nullable=False, index=True)
+
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -197,7 +200,8 @@ def create_db_and_tables():
         columns_to_add = [
             ('rss_description', 'TEXT'),
             ('full_html_content', 'TEXT'),
-            ('word_count', 'INTEGER')
+            ('word_count', 'INTEGER'),
+            ('is_favorite', 'BOOLEAN')
         ]
 
         with engine.connect() as connection:

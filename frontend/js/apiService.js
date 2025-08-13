@@ -53,6 +53,12 @@ export async function updateConfig(payload) {
     });
 }
 
+export async function toggleFavoriteStatus(articleId) {
+    return handleFetch(`/api/articles/${articleId}/favorite`, {
+        method: 'POST'
+    });
+}
+
 export async function fetchNewsSummaries(payload) {
     console.log(`API Service: Fetching news summaries from: ${SUMMARIES_API_ENDPOINT}`);
     return handleFetch(SUMMARIES_API_ENDPOINT, { 

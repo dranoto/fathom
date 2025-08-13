@@ -56,6 +56,47 @@ async def _should_attempt_scrape(article_db_obj: database.Article, min_word_coun
     return False
 
 
+def _create_article_result(
+    article_db_obj: database.Article,
+    db: SQLAlchemySession,
+    min_word_count_threshold: int,
+    summary_text: Optional[str] = None,
+    error_message: Optional[str] = None
+) -> ArticleResult:
+    """
+    Creates an ArticleResult Pydantic model from an Article database object.
+    Centralizes the logic for creating this response model.
+    """
+    # If a summary is not passed in, fetch the latest one.
+    if summary_text is None:
+        latest_summary = db.query(database.Summary).filter(
+            database.Summary.article_id == article_db_obj.id
+        ).order_by(database.Summary.created_at.desc()).first()
+        summary_text = latest_summary.summary_text if latest_summary else None
+
+    # Centralize is_summarizable logic
+    is_summarizable = (
+        article_db_obj.scraped_text_content and
+        not article_db_obj.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX) and
+        (article_db_obj.word_count is None or article_db_obj.word_count >= min_word_count_threshold)
+    )
+
+    return ArticleResult(
+        id=article_db_obj.id,
+        title=article_db_obj.title,
+        url=article_db_obj.url,
+        summary=summary_text,
+        publisher=article_db_obj.feed_source.name if article_db_obj.feed_source else article_db_obj.publisher_name,
+        published_date=article_db_obj.published_date,
+        created_at=article_db_obj.created_at,
+        source_feed_url=article_db_obj.feed_source.url if article_db_obj.feed_source else None,
+        tags=[ArticleTagResponse.from_orm(tag) for tag in article_db_obj.tags],
+        is_favorite=article_db_obj.is_favorite,
+        is_summarizable=is_summarizable,
+        error_message=error_message
+    )
+
+
 @router.post("/summaries", response_model=PaginatedSummariesAPIResponse)
 async def get_news_summaries_endpoint(
     query: NewsPageQuery,
@@ -83,6 +124,12 @@ async def get_news_summaries_endpoint(
         keyword_like = f"%{query.keyword}%"
         db_query = db_query.filter(or_(database.Article.title.ilike(keyword_like), database.Article.scraped_text_content.ilike(keyword_like)))
         search_source_display_parts.append(f"Keyword: '{query.keyword}'")
+
+    # Add filtering for favorites
+    if query.favorites_only:
+        db_query = db_query.filter(database.Article.is_favorite == True)
+        search_source_display_parts.append("Favorites")
+
     search_source_display = " & ".join(search_source_display_parts) if search_source_display_parts else "All Articles"
     db_query = db_query.options(joinedload(database.Article.tags), joinedload(database.Article.feed_source)).order_by(database.Article.published_date.desc().nullslast(), database.Article.id.desc())
 
@@ -127,40 +174,25 @@ async def get_news_summaries_endpoint(
     results_on_page: List[ArticleResult] = []
     articles_needing_ondemand_scrape: List[database.Article] = []
     for article_db_obj in articles_from_db:
-        article_result_data = {
-            "id": article_db_obj.id, "title": article_db_obj.title, "url": article_db_obj.url,
-            "publisher": article_db_obj.feed_source.name if article_db_obj.feed_source else article_db_obj.publisher_name,
-            "published_date": article_db_obj.published_date,
-            "rss_description": article_db_obj.rss_description,
-            "created_at": article_db_obj.created_at,
-            "source_feed_url": article_db_obj.feed_source.url if article_db_obj.feed_source else None,
-            "summary": summaries_map.get(article_db_obj.id), # Get summary from the map
-            "tags": [ArticleTagResponse.from_orm(tag) for tag in article_db_obj.tags],
-            "error_message": None,
-            "is_summarizable": False # Will be updated below
-        }
-        needs_on_demand_scrape = await _should_attempt_scrape(article_db_obj, min_word_count_threshold)
-        current_text_content = article_db_obj.scraped_text_content
-        current_word_count = article_db_obj.word_count
         error_parts_for_display = []
+        needs_on_demand_scrape = await _should_attempt_scrape(article_db_obj, min_word_count_threshold)
 
         if needs_on_demand_scrape:
             articles_needing_ondemand_scrape.append(article_db_obj)
             error_parts_for_display.append("Content pending fresh scrape.")
-        elif current_text_content and current_text_content.startswith(SCRAPING_ERROR_PREFIX):
-            error_parts_for_display.append(current_text_content)
-        elif current_word_count is not None and current_word_count < min_word_count_threshold:
-            error_parts_for_display.append(f"Content previously scraped but found to be very short (word count: {current_word_count}).")
+        elif article_db_obj.scraped_text_content and article_db_obj.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX):
+            error_parts_for_display.append(article_db_obj.scraped_text_content)
+        elif article_db_obj.word_count is not None and article_db_obj.word_count < min_word_count_threshold:
+            error_parts_for_display.append(f"Content previously scraped but found to be very short (word count: {article_db_obj.word_count}).")
 
-        # Allow summarization if content exists and either word count is sufficient OR word count is null (legacy article)
-        can_process_ai = current_text_content and \
-                         not current_text_content.startswith(SCRAPING_ERROR_PREFIX) and \
-                         (current_word_count is None or current_word_count >= min_word_count_threshold)
-        article_result_data["is_summarizable"] = can_process_ai
-
-        if error_parts_for_display:
-            article_result_data["error_message"] = " | ".join(list(set(error_parts_for_display)))
-        results_on_page.append(ArticleResult(**article_result_data))
+        article_result = _create_article_result(
+            article_db_obj=article_db_obj,
+            db=db,
+            min_word_count_threshold=min_word_count_threshold,
+            summary_text=summaries_map.get(article_db_obj.id),
+            error_message=" | ".join(list(set(error_parts_for_display))) if error_parts_for_display else None
+        )
+        results_on_page.append(article_result)
 
     if articles_needing_ondemand_scrape:
         logger.info(f"API: Found {len(articles_needing_ondemand_scrape)} articles for on-demand scraping on current page.")
@@ -192,22 +224,72 @@ async def get_news_summaries_endpoint(
             except Exception as e:
                 db.rollback()
                 logger.error(f"Error committing on-demand scrape for article {art_db_obj_to_process.id}: {e}", exc_info=True)
-            for res_art in results_on_page:
+            # Find the index of the result to update
+            for i, res_art in enumerate(results_on_page):
                 if res_art.id == art_db_obj_to_process.id:
-                    current_error_parts_after_od_scrape = []
+                    error_parts_for_display = []
                     if art_db_obj_to_process.scraped_text_content and art_db_obj_to_process.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX):
-                        current_error_parts_after_od_scrape.append(art_db_obj_to_process.scraped_text_content)
+                        error_parts_for_display.append(art_db_obj_to_process.scraped_text_content)
                     elif art_db_obj_to_process.word_count is not None and art_db_obj_to_process.word_count < min_word_count_threshold:
-                        current_error_parts_after_od_scrape.append(f"Content scraped but found to be very short (word count: {art_db_obj_to_process.word_count}).")
+                        error_parts_for_display.append(f"Content scraped but found to be very short (word count: {art_db_obj_to_process.word_count}).")
 
-                    res_art.is_summarizable = art_db_obj_to_process.scraped_text_content and not art_db_obj_to_process.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX) and (art_db_obj_to_process.word_count is not None and art_db_obj_to_process.word_count >= min_word_count_threshold)
-
-                    if not res_art.summary:
-                         latest_s = db.query(database.Summary).filter(database.Summary.article_id == res_art.id).order_by(database.Summary.created_at.desc()).first()
-                         if not latest_s or latest_s.summary_text.startswith("Error:"): current_error_parts_after_od_scrape.append("Summary needs generation.")
-                    res_art.error_message = " | ".join(list(set(current_error_parts_after_od_scrape))) if current_error_parts_after_od_scrape else None
+                    # Replace the old result with a new one created by the helper
+                    results_on_page[i] = _create_article_result(
+                        article_db_obj=art_db_obj_to_process,
+                        db=db,
+                        min_word_count_threshold=min_word_count_threshold,
+                        summary_text=summaries_map.get(art_db_obj_to_process.id), # Re-use summary if it existed
+                        error_message=" | ".join(error_parts_for_display) if error_parts_for_display else None
+                    )
                     break
     return PaginatedSummariesAPIResponse( search_source=search_source_display, requested_page=current_page_for_slice, page_size=query.page_size, total_articles_available=total_articles_available, total_pages=total_pages, processed_articles_on_page=results_on_page)
+
+
+@router.post("/{article_id}/favorite", response_model=ArticleResult)
+async def toggle_favorite_status(
+    article_id: int,
+    db: SQLAlchemySession = Depends(database.get_db)
+):
+    """
+    Toggles the 'is_favorite' status of a single article.
+    """
+    logger.info(f"API Call: Toggle favorite status for Article ID {article_id}")
+
+    # Use joinedload to efficiently fetch related data needed for the response model
+    article_db = db.query(database.Article).options(
+        joinedload(database.Article.tags),
+        joinedload(database.Article.feed_source)
+    ).filter(database.Article.id == article_id).first()
+
+    if not article_db:
+        raise HTTPException(status_code=404, detail="Article not found.")
+
+    # Toggle the is_favorite status
+    article_db.is_favorite = not article_db.is_favorite
+
+    try:
+        db.commit()
+        db.refresh(article_db)
+        logger.info(f"API: Successfully set is_favorite={article_db.is_favorite} for Article ID {article_id}.")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"API: Error committing favorite status for Article ID {article_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="A database error occurred while updating the article.")
+
+    # The summary is not affected by favoriting, so we can pass it from the existing relationship
+    # This avoids an extra query. We just need to make sure the summary relationship is loaded or handled.
+    # For simplicity, the helper function will query it if not provided.
+
+    # We need a min_word_count_threshold for the helper. Since this endpoint doesn't
+    # have access to the settings_db by default, we'll use a sensible default.
+    # A better approach might be to add settings_db dependency here if it becomes more complex.
+    min_word_count_threshold = 100 # A reasonable default.
+
+    return _create_article_result(
+        article_db_obj=article_db,
+        db=db,
+        min_word_count_threshold=min_word_count_threshold
+    )
 
 
 @router.post("/{article_id}/regenerate-summary", response_model=ArticleResult)
@@ -269,10 +351,13 @@ async def regenerate_article_summary(
             raise HTTPException(status_code=500, detail=f"Failed to get valid content for regeneration: {scraper_error_msg_regen}")
     if not current_text_content or current_text_content.startswith(SCRAPING_ERROR_PREFIX) or (current_word_count is not None and current_word_count < min_word_count_threshold):
         logger.error(f"API Regenerate: Article text content for ID {article_id} is still invalid or too short (word count: {current_word_count}) after potential re-scrape attempt.")
-        existing_summary_obj = db.query(database.Summary).filter(database.Summary.article_id == article_db.id).order_by(database.Summary.created_at.desc()).first()
-        summary_to_return = existing_summary_obj.summary_text if existing_summary_obj else None
         error_msg_response = f"Cannot regenerate summary: article content is invalid or too short (word count: {current_word_count})."
-        return ArticleResult(id=article_db.id, title=article_db.title, url=article_db.url, summary=summary_to_return, publisher=article_db.feed_source.name if article_db.feed_source else article_db.publisher_name, published_date=article_db.published_date, source_feed_url=article_db.feed_source.url if article_db.feed_source else None, tags=[ArticleTagResponse.from_orm(tag) for tag in article_db.tags], error_message=error_msg_response, is_summarizable=False)
+        return _create_article_result(
+            article_db_obj=article_db,
+            db=db,
+            min_word_count_threshold=min_word_count_threshold,
+            error_message=error_msg_response
+        )
 
     lc_doc_for_summary_regen = LangchainDocument(page_content=current_text_content, metadata={"source": str(article_db.url), "id": article_db.id})
     prompt_to_use = request_body.custom_prompt if request_body.custom_prompt and request_body.custom_prompt.strip() else app_config.DEFAULT_SUMMARY_PROMPT
@@ -314,7 +399,13 @@ async def regenerate_article_summary(
         # Decide on what to return or raise. Raising an exception might be more RESTful.
         raise HTTPException(status_code=500, detail=f"A database error occurred while saving changes: {e}")
 
-    return ArticleResult(id=article_db.id, title=article_db.title, url=article_db.url, summary=new_summary_text, publisher=article_db.feed_source.name if article_db.feed_source else article_db.publisher_name, published_date=article_db.published_date, source_feed_url=article_db.feed_source.url if article_db.feed_source else None, tags=[ArticleTagResponse.from_orm(tag) for tag in article_db.tags], error_message=None if not new_summary_text.startswith("Error:") else new_summary_text, is_summarizable=True)
+    return _create_article_result(
+        article_db_obj=article_db,
+        db=db,
+        min_word_count_threshold=min_word_count_threshold,
+        summary_text=new_summary_text,
+        error_message=None if not new_summary_text.startswith("Error:") else new_summary_text
+    )
 
 
 # NEW POLLING ENDPOINT

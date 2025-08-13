@@ -51,6 +51,7 @@ export let globalRssFetchInterval = 60;
 export let activeFeedFilterIds = []; 
 export let activeTagFilterIds = []; 
 export let currentKeywordSearch = null; 
+export let activeView = 'main'; // 'main' or 'favorites'
 
 // --- Utility functions to update state ---
 
@@ -163,6 +164,14 @@ export function removeActiveTagFilter(tagId) {
 
 export function setCurrentKeywordSearch(keyword) {
     currentKeywordSearch = typeof keyword === 'string' ? keyword.trim() : null;
+}
+
+export function setActiveView(view) {
+    if (view === 'main' || view === 'favorites') {
+        activeView = view;
+    } else {
+        console.warn(`State: Invalid view '${view}' provided to setActiveView.`);
+    }
 }
 
 export function setLastKnownLatestArticleTimestamp(timestamp) {
