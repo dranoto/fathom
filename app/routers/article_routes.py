@@ -81,6 +81,22 @@ async def get_news_summaries_endpoint(
     if total_pages > 0: current_page_for_slice = min(current_page_for_slice, total_pages)
     offset = (current_page_for_slice - 1) * query.page_size
     articles_from_db = db_query.limit(query.page_size).offset(offset).all()
+
+    # --- N+1 Query Optimization ---
+    # 1. Get all article IDs from the current page
+    article_ids_on_page = [article.id for article in articles_from_db]
+
+    # 2. Fetch all latest summaries for these articles in a single query
+    summaries_map = {}
+    if article_ids_on_page:
+        # Query all summaries, ordered by creation date descending
+        all_summaries = db.query(database.Summary).filter(database.Summary.article_id.in_(article_ids_on_page)).order_by(database.Summary.created_at.desc()).all()
+        # Create a map of article_id -> latest_summary_text
+        for summary in all_summaries:
+            if summary.article_id not in summaries_map and not summary.summary_text.startswith("Error:"):
+                summaries_map[summary.article_id] = summary.summary_text
+    # --- End Optimization ---
+
     results_on_page: List[ArticleResult] = []
     articles_needing_ondemand_scrape: List[database.Article] = []
     for article_db_obj in articles_from_db:
@@ -91,13 +107,11 @@ async def get_news_summaries_endpoint(
             "rss_description": article_db_obj.rss_description,
             "created_at": article_db_obj.created_at,
             "source_feed_url": article_db_obj.feed_source.url if article_db_obj.feed_source else None,
-            "summary": None, "tags": [ArticleTagResponse.from_orm(tag) for tag in article_db_obj.tags],
+            "summary": summaries_map.get(article_db_obj.id), # Get summary from the map
+            "tags": [ArticleTagResponse.from_orm(tag) for tag in article_db_obj.tags],
             "error_message": None,
             "is_summarizable": False # Will be updated below
         }
-        latest_summary_obj = db.query(database.Summary).filter(database.Summary.article_id == article_db_obj.id).order_by(database.Summary.created_at.desc()).first()
-        if latest_summary_obj and not latest_summary_obj.summary_text.startswith("Error:"):
-             article_result_data["summary"] = latest_summary_obj.summary_text
         needs_on_demand_scrape = await _should_attempt_scrape(article_db_obj)
         current_text_content = article_db_obj.scraped_text_content
         error_parts_for_display = []
@@ -183,20 +197,22 @@ async def regenerate_article_summary(
                 article_db.scraped_text_content = sc_doc_regen.page_content
                 article_db.full_html_content = sc_doc_regen.metadata.get('full_html_content')
                 current_text_content = article_db.scraped_text_content
-                db.add(article_db); db.commit(); db.refresh(article_db)
+                db.add(article_db)
                 logger.info(f"API Regenerate: Successfully re-scraped content for Article ID {article_id}.")
             else:
                 scraper_error_msg_regen = scraper_error_msg_regen or "Failed to re-scrape content (regen)"
                 article_db.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_regen}"; article_db.full_html_content = None;
                 current_text_content = article_db.scraped_text_content
-                db.add(article_db); db.commit(); db.refresh(article_db)
+                db.add(article_db)
+                # No commit here, let the transaction fail and be handled by FastAPI/Starlette
                 logger.error(f"API Regenerate: Failed to re-scrape for Article ID {article_id}: {scraper_error_msg_regen}")
                 raise HTTPException(status_code=500, detail=f"Failed to get valid content for regeneration: {scraper_error_msg_regen}")
         else:
             scraper_error_msg_regen = "Failed to re-scrape: No document returned."
             article_db.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_regen}"; article_db.full_html_content = None;
             current_text_content = article_db.scraped_text_content
-            db.add(article_db); db.commit(); db.refresh(article_db)
+            db.add(article_db)
+            # No commit here
             logger.error(f"API Regenerate: Failed to re-scrape for Article ID {article_id}: {scraper_error_msg_regen}")
             raise HTTPException(status_code=500, detail=f"Failed to get valid content for regeneration: {scraper_error_msg_regen}")
     if not current_text_content or current_text_content.startswith(SCRAPING_ERROR_PREFIX) or len(current_text_content) < TEXT_LENGTH_THRESHOLD:
@@ -212,10 +228,11 @@ async def regenerate_article_summary(
     db.query(database.Summary).filter(database.Summary.article_id == article_id).delete(synchronize_session=False)
     model_name = database.get_setting(db, "summary_model_name", app_config.DEFAULT_SUMMARY_MODEL_NAME)
     new_summary_db_obj = database.Summary(article_id=article_id, summary_text=new_summary_text, prompt_used=prompt_to_use, model_used=model_name)
-    db.add(new_summary_db_obj); db.commit(); db.refresh(new_summary_db_obj)
+    db.add(new_summary_db_obj)
     if request_body.regenerate_tags and llm_tag and current_text_content and not current_text_content.startswith(SCRAPING_ERROR_PREFIX) and len(current_text_content) >= TEXT_LENGTH_THRESHOLD :
         logger.info(f"API Regenerate: Regenerating tags for Article ID {article_id}.")
-        if article_db.tags: article_db.tags.clear(); db.commit(); db.refresh(article_db)
+        if article_db.tags:
+            article_db.tags.clear()
         tag_names_generated = await summarizer.generate_tags_for_text(current_text_content, llm_tag, None)
         if tag_names_generated:
             for tag_name in tag_names_generated:
@@ -223,13 +240,28 @@ async def regenerate_article_summary(
                 if not tag_name_cleaned: continue
                 tag_db_obj = db.query(database.Tag).filter(database.Tag.name == tag_name_cleaned).first()
                 if not tag_db_obj:
-                    tag_db_obj = database.Tag(name=tag_name_cleaned); db.add(tag_db_obj)
-                    try: db.flush()
-                    except IntegrityError: db.rollback(); tag_db_obj = db.query(database.Tag).filter(database.Tag.name == tag_name_cleaned).first()
-                if tag_db_obj and tag_db_obj not in article_db.tags: article_db.tags.append(tag_db_obj)
-            try: db.commit(); db.refresh(article_db); logger.info(f"API Regenerate: Saved tags for Article ID {article_id}: {tag_names_generated}")
-            except Exception as e_commit_tags: db.rollback(); logger.error(f"API Regenerate: Error saving regenerated tags for Article ID {article_id}: {e_commit_tags}", exc_info=True)
-    db.refresh(article_db)
+                    try:
+                        # Use a nested transaction (SAVEPOINT) to handle potential race conditions
+                        # for tag creation without rolling back the entire transaction.
+                        with db.begin_nested():
+                            tag_db_obj = database.Tag(name=tag_name_cleaned)
+                            db.add(tag_db_obj)
+                    except IntegrityError:
+                        # The nested transaction is automatically rolled back on error.
+                        # The main transaction is still active. We can now safely query for the existing tag.
+                        tag_db_obj = db.query(database.Tag).filter(database.Tag.name == tag_name_cleaned).first()
+                if tag_db_obj and tag_db_obj not in article_db.tags:
+                    article_db.tags.append(tag_db_obj)
+    try:
+        db.commit()
+        db.refresh(article_db)
+        logger.info(f"API Regenerate: Successfully committed all changes for Article ID {article_id}.")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"API Regenerate: Error committing changes for Article ID {article_id}: {e}", exc_info=True)
+        # Decide on what to return or raise. Raising an exception might be more RESTful.
+        raise HTTPException(status_code=500, detail=f"A database error occurred while saving changes: {e}")
+
     return ArticleResult(id=article_db.id, title=article_db.title, url=article_db.url, summary=new_summary_text, publisher=article_db.feed_source.name if article_db.feed_source else article_db.publisher_name, published_date=article_db.published_date, source_feed_url=article_db.feed_source.url if article_db.feed_source else None, tags=[ArticleTagResponse.from_orm(tag) for tag in article_db.tags], error_message=None if not new_summary_text.startswith("Error:") else new_summary_text, is_summarizable=True)
 
 

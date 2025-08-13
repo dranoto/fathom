@@ -1,8 +1,8 @@
 # app/database.py
 import os
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey, UniqueConstraint, Index, Table
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey, UniqueConstraint, Index, Table, inspect
 from sqlalchemy.orm import sessionmaker, Session as SQLAlchemySession, relationship, declarative_base # Mapped, mapped_column for newer SQLAlchemy
-from sqlalchemy.sql import func
+from sqlalchemy.sql import func, text
 from contextlib import contextmanager
 from typing import Generator, Any, Optional # Added Optional
 
@@ -207,8 +207,41 @@ def create_db_and_tables():
     try:
         Base.metadata.create_all(bind=engine)
         print("DATABASE: Database tables checked/created successfully.")
+
+        # Simple migration logic to add missing columns
+        inspector = inspect(engine)
+        table_name = "articles"
+        if not inspector.has_table(table_name):
+            print(f"DATABASE: Table '{table_name}' not found, skipping migration check.")
+            return
+
+        columns = inspector.get_columns(table_name)
+        column_names = {c['name'] for c in columns}
+
+        # List of columns to check and add if they don't exist
+        # Each tuple is (column_name, column_type)
+        # E.g., ('rss_description', 'TEXT')
+        columns_to_add = [
+            ('rss_description', 'TEXT'),
+            ('full_html_content', 'TEXT')
+        ]
+
+        with engine.connect() as connection:
+            with connection.begin(): # Start a transaction
+                for column_name, column_type in columns_to_add:
+                    if column_name not in column_names:
+                        print(f"DATABASE: Column '{column_name}' not found in '{table_name}'. Adding it.")
+                        try:
+                            # Use text() for literal SQL
+                            connection.execute(text(f'ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type};'))
+                            print(f"DATABASE: Successfully added column '{column_name}'.")
+                        except Exception as alter_e:
+                            print(f"DATABASE: Error adding column '{column_name}': {alter_e}")
+                            # The transaction will be rolled back automatically on exception
+
     except Exception as e:
-        print(f"DATABASE: Error creating database tables: {e}")
+        print(f"DATABASE: Error during database setup: {e}")
+
 
 if __name__ == "__main__":
     # This is typically for direct script execution, e.g., initial setup
