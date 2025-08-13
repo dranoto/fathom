@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     libu2f-udev \
     libcairo2 \
-    libpango-1.0-0
+    libpango-1.0-0 \
     # Clean up apt cache to reduce image size
     && rm -rf /var/lib/apt/lists/*
 
