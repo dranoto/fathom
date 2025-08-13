@@ -239,7 +239,7 @@ async def regenerate_article_summary(
     prompt_to_use = request_body.custom_prompt if request_body.custom_prompt and request_body.custom_prompt.strip() else app_config.DEFAULT_SUMMARY_PROMPT
     new_summary_text = await summarizer.summarize_document_content(lc_doc_for_summary_regen, llm_summary, prompt_to_use)
     db.query(database.Summary).filter(database.Summary.article_id == article_id).delete(synchronize_session=False)
-    model_name = settings_database.get_setting(db, "summary_model_name", app_config.DEFAULT_SUMMARY_MODEL_NAME)
+    model_name = settings_database.get_setting(settings_db, "summary_model_name", app_config.DEFAULT_SUMMARY_MODEL_NAME)
     new_summary_db_obj = database.Summary(article_id=article_id, summary_text=new_summary_text, prompt_used=prompt_to_use, model_used=model_name)
     db.add(new_summary_db_obj)
     if request_body.regenerate_tags and llm_tag and current_text_content and not current_text_content.startswith(SCRAPING_ERROR_PREFIX) and len(current_text_content) >= text_length_threshold :
