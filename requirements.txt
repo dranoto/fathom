@@ -4,6 +4,7 @@ python-dotenv
 langchain
 langchain-google-genai
 langchain-community # For document_loaders like PlaywrightURLLoader
+google-genai
 feedparser
 playwright
 sqlalchemy
