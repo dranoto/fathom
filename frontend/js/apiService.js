@@ -1,6 +1,13 @@
 // frontend/js/apiService.js
-// CORRECTED IMPORT PATH: Assuming apiService.js and state.js are in the same 'js' directory
-import { SUMMARIES_API_ENDPOINT, CHAT_API_ENDPOINT_BASE } from './state.js'; 
+// apiService.js
+let SUMMARIES_API_ENDPOINT = '/api/articles/summaries'; // Default value
+let CHAT_API_ENDPOINT_BASE = '/api'; // Default value
+
+export function setApiEndpoints(summariesEndpoint, chatBaseEndpoint) {
+    if (summariesEndpoint) SUMMARIES_API_ENDPOINT = summariesEndpoint;
+    if (chatBaseEndpoint) CHAT_API_ENDPOINT_BASE = chatBaseEndpoint;
+    console.log(`API Service Endpoints Updated: SUMMARIES -> ${SUMMARIES_API_ENDPOINT}, CHAT_BASE -> ${CHAT_API_ENDPOINT_BASE}`);
+}
 
 /**
  * This module centralizes all API communication for the NewsAI frontend.

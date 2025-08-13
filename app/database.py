@@ -109,6 +109,9 @@ class Article(Base):
     # This will be sanitized before being sent to the frontend.
     full_html_content = Column(Text, nullable=True)
 
+    # NEW FIELD: To store the word count of the scraped text content.
+    word_count = Column(Integer, nullable=True, index=True)
+
 
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -193,7 +196,8 @@ def create_db_and_tables():
         # E.g., ('rss_description', 'TEXT')
         columns_to_add = [
             ('rss_description', 'TEXT'),
-            ('full_html_content', 'TEXT')
+            ('full_html_content', 'TEXT'),
+            ('word_count', 'INTEGER')
         ]
 
         with engine.connect() as connection:
