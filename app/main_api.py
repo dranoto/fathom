@@ -108,7 +108,10 @@ async def startup_event():
                 temperature=0.2, max_output_tokens=app_config.SUMMARY_MAX_OUTPUT_TOKENS
             )
             app.state.llm_summary_instance = llm_summary_instance_global
-            logger.info(f"MAIN_API: Summarization LLM ({summary_model_name}) initialized.")
+            if app.state.llm_summary_instance:
+                logger.info(f"MAIN_API: Summarization LLM ({summary_model_name}) initialized.")
+            else:
+                logger.error(f"MAIN_API: Summarization LLM ({summary_model_name}) FAILED to initialize.")
 
             llm_chat_instance_global = summarizer.initialize_llm(
                 api_key=app_config.GEMINI_API_KEY,
@@ -116,7 +119,10 @@ async def startup_event():
                 temperature=0.5, max_output_tokens=app_config.CHAT_MAX_OUTPUT_TOKENS
             )
             app.state.llm_chat_instance = llm_chat_instance_global
-            logger.info(f"MAIN_API: Chat LLM ({chat_model_name}) initialized.")
+            if app.state.llm_chat_instance:
+                logger.info(f"MAIN_API: Chat LLM ({chat_model_name}) initialized.")
+            else:
+                logger.error(f"MAIN_API: Chat LLM ({chat_model_name}) FAILED to initialize.")
 
             llm_tag_instance_global = summarizer.initialize_llm(
                 api_key=app_config.GEMINI_API_KEY,
@@ -124,7 +130,10 @@ async def startup_event():
                 temperature=0.1, max_output_tokens=app_config.TAG_MAX_OUTPUT_TOKENS
             )
             app.state.llm_tag_instance = llm_tag_instance_global
-            logger.info(f"MAIN_API: Tag Generation LLM ({tag_model_name}) initialized.")
+            if app.state.llm_tag_instance:
+                logger.info(f"MAIN_API: Tag Generation LLM ({tag_model_name}) initialized.")
+            else:
+                logger.error(f"MAIN_API: Tag Generation LLM ({tag_model_name}) FAILED to initialize.")
 
         except Exception as e:
             logger.critical(f"MAIN_API: CRITICAL ERROR during LLM Initialization: {e}.", exc_info=True)
