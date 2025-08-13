@@ -58,6 +58,12 @@ async def get_initial_config_endpoint(
         rss_fetch_interval_minutes = app_config.DEFAULT_RSS_FETCH_INTERVAL_MINUTES
         logger.warning(f"Invalid 'rss_fetch_interval_minutes' value in settings DB. Falling back to default: {rss_fetch_interval_minutes}")
 
+    try:
+        minimum_word_count = int(all_settings.get("minimum_word_count"))
+    except (ValueError, TypeError):
+        minimum_word_count = 100  # Fallback default
+        logger.warning(f"Invalid 'minimum_word_count' value in settings DB. Falling back to default: {minimum_word_count}")
+
     app_settings = AppSettings(
         summary_model_name=all_settings.get("summary_model_name"),
         chat_model_name=all_settings.get("chat_model_name"),
@@ -67,6 +73,7 @@ async def get_initial_config_endpoint(
         summary_prompt=all_settings.get("summary_prompt"),
         chat_prompt=all_settings.get("chat_prompt"),
         tag_generation_prompt=all_settings.get("tag_generation_prompt"),
+        minimum_word_count=minimum_word_count,
     )
 
     # 4. Construct and return the main response object

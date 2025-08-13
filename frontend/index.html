@@ -72,9 +72,15 @@
                             <label for="num_articles_setup">Articles per Page:</label>
                             <input type="number" id="num_articles_setup" name="num_articles_setup" value="6" min="1" max="20" required>
                         </div>
-                        <button type="submit" class="submit-button">Save Page Size</button>
+                        <div class="form-group">
+                            <label for="minimum-word-count-setup">Minimum Word Count for Articles:</label>
+                            <input type="number" id="minimum-word-count-setup" name="minimum_word_count_setup" value="100" min="0" max="1000" required>
+                            <small>Articles with fewer words will be hidden from the feed.</small>
+                        </div>
+                        <button type="submit" class="submit-button">Save Content Preferences</button>
                     </form>
                     <p>Current articles per page: <span id="current-num-articles-display">6</span></p>
+                    <p>Current minimum word count: <span id="current-minimum-word-count-display">100</span></p>
                 </div>
                 
                 <div class="setup-block">

@@ -8,7 +8,8 @@
 
 // --- Core Application State ---
 export let dbFeedSources = []; 
-export let articlesPerPage = 6; 
+export let articlesPerPage = 6;
+export let minimumWordCount = 100;
 export let currentPage = 1; 
 export let totalPages = 1; 
 export let totalArticlesAvailable = 0; 
@@ -61,6 +62,13 @@ export function setArticlesPerPage(count) {
     const numCount = parseInt(count);
     if (!isNaN(numCount) && numCount > 0) {
         articlesPerPage = numCount;
+    }
+}
+
+export function setMinimumWordCount(count) {
+    const numCount = parseInt(count);
+    if (!isNaN(numCount) && numCount >= 0) {
+        minimumWordCount = numCount;
     }
 }
 

@@ -95,24 +95,33 @@ function renderRssFeedsListSetupUI() {
 }
 
 /**
- * Fetches all feed sources from the backend, updates the shared state,
- * and then re-renders the feed list in the Setup tab and triggers
- * a refresh of the feed filter buttons on the main page.
+ * Renders feed lists and buttons based on the current state.
+ * This function does NOT fetch data from the API.
  */
-export async function loadAndRenderDbFeeds() {
-    console.log("FeedHandler: Loading and rendering DB feeds...");
+export function renderFeedsFromState() {
+    console.log("FeedHandler: Rendering feeds from state...");
+    renderRssFeedsListSetupUI(); // Render list in Setup tab
+
+    if (refreshMainFeedFilterButtonsCallback) {
+        refreshMainFeedFilterButtonsCallback(); // Refresh filter buttons on main page
+    }
+}
+
+
+/**
+ * Fetches all feed sources from the backend, updates the shared state,
+ * and then re-renders the UI.
+ */
+export async function fetchAndRenderDbFeeds() {
+    console.log("FeedHandler: Fetching and rendering DB feeds...");
     try {
         const feeds = await apiService.fetchDbFeeds();
         state.setDbFeedSources(feeds || []); // Update shared state
-        renderRssFeedsListSetupUI(); // Render list in Setup tab
-
-        if (refreshMainFeedFilterButtonsCallback) {
-            refreshMainFeedFilterButtonsCallback(); // Refresh filter buttons on main page
-        }
+        renderFeedsFromState();
     } catch (error) {
         console.error("FeedHandler: Error fetching DB feed sources:", error);
         state.setDbFeedSources([]); // Clear state on error
-        renderRssFeedsListSetupUI(); // Render empty/error state
+        renderFeedsFromState(); // Render empty/error state
         if (rssFeedsListUI) { // Check if element exists before modifying
             const errorLi = document.createElement('li');
             errorLi.textContent = `Error loading feeds: ${error.message}`;
@@ -121,6 +130,7 @@ export async function loadAndRenderDbFeeds() {
         }
     }
 }
+
 
 /**
  * Handles the submission of the "Add RSS Feed" form.
@@ -172,7 +182,7 @@ async function handleAddFeedFormSubmit(event) {
         rssFeedNameInput.value = '';
         rssFeedIntervalInput.value = '';
         // Refresh the list of feeds
-        await loadAndRenderDbFeeds();
+        await fetchAndRenderDbFeeds();
     } catch (error) {
         console.error("FeedHandler: Error adding feed:", error);
         alert(`Error adding feed: ${error.message}`);
@@ -222,7 +232,7 @@ async function promptEditFeed(feed) {
         try {
             await apiService.updateRssFeed(feed.id, updatePayload);
             alert("Feed updated successfully!");
-            await loadAndRenderDbFeeds(); // Refresh list
+            await fetchAndRenderDbFeeds(); // Refresh list
         } catch (error) {
             console.error("FeedHandler: Error updating feed:", error);
             alert(`Error updating feed: ${error.message}`);
@@ -249,11 +259,10 @@ async function handleDeleteFeed(feedId) {
         alert("Feed deleted successfully!");
         // Update state by removing the feed
         state.setDbFeedSources(state.dbFeedSources.filter(f => f.id !== feedId));
-        // Refresh the UI
-        renderRssFeedsListSetupUI(); // Re-render setup list
-        if (refreshMainFeedFilterButtonsCallback) {
-            refreshMainFeedFilterButtonsCallback(); // Refresh filter buttons on main page
-        }
+
+        // Refresh the UI from the updated state
+        renderFeedsFromState();
+
         // Also, if the deleted feed was an active filter, clear it
         if (state.activeFeedFilterIds.includes(feedId)) {
             state.setActiveFeedFilterIds(state.activeFeedFilterIds.filter(id => id !== feedId));

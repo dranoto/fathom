@@ -66,6 +66,7 @@ DEFAULT_SETTINGS: Dict[str, str] = {
     "summary_prompt": config.DEFAULT_SUMMARY_PROMPT,
     "chat_prompt": config.DEFAULT_CHAT_PROMPT,
     "tag_generation_prompt": config.DEFAULT_TAG_GENERATION_PROMPT,
+    "minimum_word_count": "100", # Default value for the new setting
 }
 
 # --- Helper functions for Configuration ---

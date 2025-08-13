@@ -9,6 +9,7 @@ import * as apiService from './apiService.js';
 
 // --- DOM Element References for the Setup Tab ---
 let numArticlesSetupInput, currentNumArticlesDisplay,
+    minimumWordCountSetupInput, currentMinimumWordCountDisplay,
     summaryPromptInput, currentSummaryPromptDisplay,
     tagGenerationPromptInput, currentTagGenerationPromptDisplay,
     chatPromptInput, currentChatPromptDisplay,
@@ -22,6 +23,8 @@ let numArticlesSetupInput, currentNumArticlesDisplay,
 export function initializeDOMReferences() {
     numArticlesSetupInput = document.getElementById('num_articles_setup');
     currentNumArticlesDisplay = document.getElementById('current-num-articles-display');
+    minimumWordCountSetupInput = document.getElementById('minimum-word-count-setup');
+    currentMinimumWordCountDisplay = document.getElementById('current-minimum-word-count-display');
     summaryPromptInput = document.getElementById('summary-prompt-input');
     currentSummaryPromptDisplay = document.getElementById('current-summary-prompt-display');
     tagGenerationPromptInput = document.getElementById('tag-generation-prompt-input');
@@ -60,6 +63,7 @@ export function loadConfigurations(initialBackendConfig) {
 
     // Set state from backend settings
     state.setArticlesPerPage(settings.articles_per_page);
+    state.setMinimumWordCount(settings.minimum_word_count);
     state.setGlobalRssFetchInterval(settings.rss_fetch_interval_minutes);
 
     // Set prompts
@@ -113,6 +117,8 @@ export function updateSetupUI() {
 
     if (numArticlesSetupInput) numArticlesSetupInput.value = state.articlesPerPage;
     if (currentNumArticlesDisplay) currentNumArticlesDisplay.textContent = state.articlesPerPage;
+    if (minimumWordCountSetupInput) minimumWordCountSetupInput.value = state.minimumWordCount;
+    if (currentMinimumWordCountDisplay) currentMinimumWordCountDisplay.textContent = state.minimumWordCount;
 
     if (summaryPromptInput) summaryPromptInput.value = state.currentSummaryPrompt;
     if (currentSummaryPromptDisplay) currentSummaryPromptDisplay.textContent = state.currentSummaryPrompt;
@@ -137,6 +143,7 @@ async function saveConfiguration() {
     try {
         const settingsToSave = {
             articles_per_page: state.articlesPerPage,
+            minimum_word_count: state.minimumWordCount,
             rss_fetch_interval_minutes: state.globalRssFetchInterval,
             summary_prompt: state.currentSummaryPrompt,
             chat_prompt: state.currentChatPrompt,
@@ -161,22 +168,31 @@ async function saveConfiguration() {
 }
 
 /**
- * Saves the "Articles per Page" setting.
+ * Saves the content preference settings (articles per page, min word count).
  */
-export function saveArticlesPerPage(count, callback) {
-    const newArticlesPerPage = parseInt(count);
-    if (newArticlesPerPage >= 1 && newArticlesPerPage <= 50) {
-        state.setArticlesPerPage(newArticlesPerPage);
-        updateSetupUI();
-        saveConfiguration(); // Persist all settings
-        state.setCurrentPage(1);
-        if (callback && typeof callback === 'function') {
-            callback();
-        }
-    } else {
+export function saveContentPreferences(articlesPerPage, minWordCount, callback) {
+    const newArticlesPerPage = parseInt(articlesPerPage);
+    const newMinWordCount = parseInt(minWordCount);
+
+    if (isNaN(newArticlesPerPage) || newArticlesPerPage < 1 || newArticlesPerPage > 50) {
         alert('Please enter a number of articles per page between 1 and 50.');
+        return;
+    }
+    if (isNaN(newMinWordCount) || newMinWordCount < 0 || newMinWordCount > 1000) {
+        alert('Please enter a minimum word count between 0 and 1000.');
+        return;
+    }
+
+    state.setArticlesPerPage(newArticlesPerPage);
+    state.setMinimumWordCount(newMinWordCount);
+    updateSetupUI();
+    saveConfiguration(); // Persist all settings
+    state.setCurrentPage(1);
+    if (callback && typeof callback === 'function') {
+        callback();
     }
 }
+
 
 /**
  * Saves the custom AI prompt settings.
@@ -248,7 +264,7 @@ export function setupFormEventListeners(callbacks = {}) {
     }
     contentPrefsForm.addEventListener('submit', (e) => {
         e.preventDefault();
-        saveArticlesPerPage(numArticlesSetupInput.value, callbacks.onArticlesPerPageChange);
+        saveContentPreferences(numArticlesSetupInput.value, minimumWordCountSetupInput.value, callbacks.onArticlesPerPageChange);
     });
     aiPromptsForm.addEventListener('submit', (e) => {
         e.preventDefault();

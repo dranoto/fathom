@@ -13,6 +13,7 @@ class AppSettings(BaseModel):
     summary_prompt: str
     chat_prompt: str
     tag_generation_prompt: str
+    minimum_word_count: int
 
 class InitialConfigResponse(BaseModel):
     settings: AppSettings
