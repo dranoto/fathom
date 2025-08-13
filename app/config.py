@@ -8,7 +8,9 @@ load_dotenv() # Load environment variables from .env file
 # --- Database Configuration ---
 SQLITE_DB_SUBDIR = "data"
 SQLITE_DB_FILE = "newsai.db"
+SETTINGS_DB_FILE = "settings.db"
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///./{SQLITE_DB_SUBDIR}/{SQLITE_DB_FILE}")
+SETTINGS_DATABASE_URL = os.getenv("SETTINGS_DATABASE_URL", f"sqlite:///./{SQLITE_DB_SUBDIR}/{SETTINGS_DB_FILE}")
 
 # --- LLM Configuration ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")

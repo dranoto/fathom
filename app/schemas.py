@@ -3,32 +3,33 @@ from pydantic import BaseModel, HttpUrl, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-# --- Pydantic Models ---
-class InitialConfigResponse(BaseModel):
-    default_rss_feeds: List[str]
-    all_db_feed_sources: List[Dict[str, Any]]
-    default_articles_per_page: int
-    default_summary_prompt: str
-    default_chat_prompt: str
-    default_tag_generation_prompt: str
-    default_rss_fetch_interval_minutes: int
-    path_to_extension: str
-    use_headless_browser: bool
+# --- Pydantic Models for Settings ---
+class AppSettings(BaseModel):
     summary_model_name: str
     chat_model_name: str
     tag_model_name: str
+    articles_per_page: int
+    rss_fetch_interval_minutes: int
+    summary_prompt: str
+    chat_prompt: str
+    tag_generation_prompt: str
+
+class InitialConfigResponse(BaseModel):
+    settings: AppSettings
+    # Non-settings values
+    default_rss_feeds: List[str]
+    all_db_feed_sources: List[Dict[str, Any]]
+    path_to_extension: str
+    use_headless_browser: bool
     available_models: List[str]
     class Config: from_attributes = True
 
-class UpdateConfigRequest(BaseModel):
-    summary_model_name: str
-    chat_model_name: str
-    tag_model_name: str
+class UpdateAppSettingsRequest(BaseModel):
+    settings: AppSettings
 
-class UpdateConfigResponse(BaseModel):
-    summary_model_name: str
-    chat_model_name: str
-    tag_model_name: str
+class UpdateAppSettingsResponse(BaseModel):
+    message: str
+    settings: AppSettings
 
 class FeedSourceResponse(BaseModel):
     id: int
