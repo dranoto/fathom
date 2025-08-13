@@ -119,3 +119,7 @@ class NewArticleCheckResponse(BaseModel):
     new_articles_available: bool
     latest_article_timestamp: Optional[datetime] = None
     article_count: Optional[int] = 0 # Number of new articles since last check
+
+
+class RefreshStatusResponse(BaseModel):
+    is_refreshing: bool

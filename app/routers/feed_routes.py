@@ -8,7 +8,7 @@ from typing import List
 # Relative imports for modules within the 'app' directory
 from .. import database # To access get_db and ORM models like RSSFeedSource
 from .. import config as app_config # To access application-level configurations
-from ..schemas import FeedSourceResponse, AddFeedRequest, UpdateFeedRequest # Pydantic models
+from ..schemas import FeedSourceResponse, AddFeedRequest, UpdateFeedRequest, RefreshStatusResponse # Pydantic models
 # Assuming trigger_rss_update_all_feeds will be moved to a tasks.py or similar
 # For now, we'll prepare for its import. If it's directly from main_api, adjustments might be needed.
 from .. import tasks # Placeholder for where trigger_rss_update_all_feeds might live
@@ -164,3 +164,13 @@ async def manual_trigger_rss_refresh(background_tasks: BackgroundTasks):
     except Exception as e:
         logger.error(f"Error scheduling manual RSS refresh: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Could not schedule RSS refresh: {str(e)}")
+
+
+@router.get("/feeds/refresh-status", response_model=RefreshStatusResponse)
+async def get_rss_refresh_status():
+    """
+    Checks if an RSS feed refresh task is currently in progress.
+    """
+    logger.info("API Call: Checking RSS refresh status.")
+    is_locked = tasks.is_rss_update_locked()
+    return {"is_refreshing": is_locked}

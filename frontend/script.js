@@ -321,16 +321,20 @@ function setupGlobalEventListeners() {
     if (refreshNewsBtn) {
         refreshNewsBtn.addEventListener('click', async () => {
             if (!confirm("This will ask the backend to check all RSS feeds for new articles. This might take a moment. Continue?")) return;
+
             uiManager.showLoadingIndicator(true, 'Requesting backend to refresh RSS feeds...');
+
             try {
-                const result = await apiService.triggerRssRefresh();
-                alert(result.message || "RSS refresh initiated. New articles will appear after processing.");
-                setTimeout(() => {
-                    state.setCurrentPage(1); 
-                    fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch); 
-                }, 10000); 
-            } catch (error) { console.error("MainScript: Error triggering RSS refresh:", error); alert(`Error triggering refresh: ${error.message}`); } 
-            finally { uiManager.showLoadingIndicator(false); }
+                await apiService.triggerRssRefresh();
+
+                // Start polling for completion
+                pollForRefreshCompletion();
+
+            } catch (error) {
+                console.error("MainScript: Error triggering RSS refresh:", error);
+                alert(`Error triggering refresh: ${error.message}`);
+                uiManager.showLoadingIndicator(false);
+            }
         });
     } else { console.warn("MainScript: Refresh news button not found."); }
     
@@ -368,6 +372,40 @@ function setupGlobalEventListeners() {
         }
     });
     console.log("MainScript: Global event listeners set up.");
+}
+
+function pollForRefreshCompletion() {
+    const pollInterval = 3000; // 3 seconds
+    const maxPollTime = 120000; // 2 minutes
+    let timeWaited = 0;
+
+    uiManager.showLoadingIndicator(true, 'Feeds are refreshing. Please wait...');
+
+    const intervalId = setInterval(async () => {
+        try {
+            const status = await apiService.fetchRefreshStatus();
+            if (!status.is_refreshing) {
+                clearInterval(intervalId);
+                uiManager.showLoadingIndicator(true, 'Refresh complete. Fetching new articles...');
+                state.setCurrentPage(1);
+                fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch).finally(() => {
+                    uiManager.showLoadingIndicator(false);
+                });
+            } else {
+                timeWaited += pollInterval;
+                if (timeWaited >= maxPollTime) {
+                    clearInterval(intervalId);
+                    alert("The refresh is taking longer than expected. The process will continue in the background, and new articles will appear when ready.");
+                    uiManager.showLoadingIndicator(false);
+                }
+            }
+        } catch (error) {
+            clearInterval(intervalId);
+            console.error("MainScript: Error polling for refresh completion:", error);
+            alert("An error occurred while checking the refresh status.");
+            uiManager.showLoadingIndicator(false);
+        }
+    }, pollInterval);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
