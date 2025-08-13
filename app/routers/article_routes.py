@@ -85,6 +85,17 @@ async def get_news_summaries_endpoint(
         search_source_display_parts.append(f"Keyword: '{query.keyword}'")
     search_source_display = " & ".join(search_source_display_parts) if search_source_display_parts else "All Articles"
     db_query = db_query.options(joinedload(database.Article.tags), joinedload(database.Article.feed_source)).order_by(database.Article.published_date.desc().nullslast(), database.Article.id.desc())
+
+    # Get the minimum word count threshold from settings.
+    try:
+        min_word_count_threshold = int(settings_database.get_setting(settings_db, "minimum_word_count", "100"))
+    except (ValueError, TypeError):
+        min_word_count_threshold = 100
+
+    # Apply the word count filter if no other specific filters are active.
+    if not query.feed_source_ids and not query.tag_ids and not query.keyword:
+        db_query = db_query.filter(database.Article.word_count >= min_word_count_threshold)
+
     total_articles_available = db_query.count()
     total_pages = math.ceil(total_articles_available / query.page_size) if query.page_size > 0 else 0
     current_page_for_slice = max(1, query.page);
@@ -106,24 +117,6 @@ async def get_news_summaries_endpoint(
             if summary.article_id not in summaries_map and not summary.summary_text.startswith("Error:"):
                 summaries_map[summary.article_id] = summary.summary_text
     # --- End Optimization ---
-
-    try:
-        min_word_count_threshold = int(settings_database.get_setting(settings_db, "minimum_word_count", "100"))
-    except (ValueError, TypeError):
-        min_word_count_threshold = 100
-
-    # Add a filter to exclude articles with word_count below the threshold
-    # This filter is applied only if no specific feed, tag, or keyword is given,
-    # to avoid hiding results from specific searches.
-    if not query.feed_source_ids and not query.tag_ids and not query.keyword:
-        db_query = db_query.filter(database.Article.word_count >= min_word_count_threshold)
-
-    total_articles_available = db_query.count()
-    total_pages = math.ceil(total_articles_available / query.page_size) if query.page_size > 0 else 0
-    current_page_for_slice = max(1, query.page);
-    if total_pages > 0: current_page_for_slice = min(current_page_for_slice, total_pages)
-    offset = (current_page_for_slice - 1) * query.page_size
-    articles_from_db = db_query.limit(query.page_size).offset(offset).all()
 
     results_on_page: List[ArticleResult] = []
     articles_needing_ondemand_scrape: List[database.Article] = []
