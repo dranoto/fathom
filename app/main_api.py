@@ -188,14 +188,14 @@ logger.info("MAIN_API: All API routers included.")
 
 # --- Static Files & Root Endpoint ---
 try:
-    app.mount("/static", StaticFiles(directory="static_frontend"), name="static_frontend_files")
-    logger.info("MAIN_API: Static files mounted from 'static_frontend' directory at '/static'.")
+    app.mount("/static", StaticFiles(directory="frontend"), name="static_frontend_files")
+    logger.info("MAIN_API: Static files mounted from 'frontend' directory at '/static'.")
 except RuntimeError as e:
-    logger.error(f"MAIN_API: Error mounting static files. Ensure 'static_frontend' directory exists at the project root. Details: {e}", exc_info=True)
+    logger.error(f"MAIN_API: Error mounting static files. Ensure 'frontend' directory exists at the project root. Details: {e}", exc_info=True)
 
 @app.get("/", response_class=FileResponse, include_in_schema=False)
 async def serve_index_html():
-    index_html_path = "static_frontend/index.html"
+    index_html_path = "frontend/index.html"
     import os
     if not os.path.exists(index_html_path):
         logger.error(f"MAIN_API: index.html not found at '{index_html_path}'. Ensure it exists.")

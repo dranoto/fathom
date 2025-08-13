@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from typing import Any, Optional, List # Added List
+from bs4 import BeautifulSoup
 
 from . import config as app_config 
 from .database import RSSFeedSource, Article 
@@ -176,6 +177,17 @@ async def fetch_and_store_articles_from_feed(db: Session, feed_source: RSSFeedSo
             logger.warning(f"RSS_CLIENT: Critical - published_date became invalid for {article_url} before saving. Skipping.")
             continue
 
+        # NEW: Extract and clean RSS description to plain text
+        raw_description = feed_entry_data.get('description', feed_entry_data.get('summary'))
+        plain_text_description = None
+        if raw_description:
+            try:
+                soup = BeautifulSoup(raw_description, "html.parser")
+                plain_text_description = soup.get_text(separator=' ', strip=True)
+            except Exception as e:
+                logger.warning(f"RSS_CLIENT: Could not parse description HTML for {article_url}. Storing raw. Error: {e}")
+                plain_text_description = raw_description
+
         # Prepare content for DB
         text_content_to_save = scraped_doc.page_content
         html_content_to_save = scraped_doc.metadata.get('full_html_content')
@@ -194,6 +206,7 @@ async def fetch_and_store_articles_from_feed(db: Session, feed_source: RSSFeedSo
             title=article_title,
             publisher_name=feed_source.name or feed_title_from_rss, 
             published_date=published_date_dt,
+            rss_description=plain_text_description,
             scraped_text_content=text_content_to_save, # Save extracted text
             full_html_content=html_content_to_save    # Save extracted HTML
         )

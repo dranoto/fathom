@@ -56,7 +56,7 @@ class ArticleResult(BaseModel):
     title: Optional[str] = None
     url: str 
     summary: Optional[str] = None
-    content_snippet: Optional[str] = None
+    rss_description: Optional[str] = None
     publisher: Optional[str] = None
     published_date: Optional[datetime] = None # This is publication date
     created_at: Optional[datetime] = None # NEW: Add created_at for polling logic
