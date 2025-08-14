@@ -92,21 +92,29 @@ export async function openAndLoadFullArticleModal(articleId, articleTitle, origi
 
     try {
         const contentData = await apiService.fetchSanitizedArticleContent(articleId);
+        fullArticleModalBody.innerHTML = ''; // Clear loading message
         if (contentData.error_message) {
-            fullArticleModalBody.innerHTML = `<p class="error-message">${contentData.error_message}</p>`;
-            // Corrected logger usage:
+            const errorP = document.createElement('p');
+            errorP.classList.add('error-message');
+            errorP.textContent = contentData.error_message;
+            fullArticleModalBody.appendChild(errorP);
             console.warn(`UIManager: Error fetching sanitized content for article ${articleId}: ${contentData.error_message}`);
         } else if (contentData.sanitized_html_content) {
+            // Assuming sanitized_html_content is already sanitized by the backend
             fullArticleModalBody.innerHTML = contentData.sanitized_html_content;
         } else {
-            fullArticleModalBody.innerHTML = "<p>Full article content could not be loaded or is empty.</p>";
+            fullArticleModalBody.textContent = "Full article content could not be loaded or is empty.";
         }
         if(contentData.title) fullArticleModalTitle.textContent = contentData.title;
         if(contentData.original_url) fullArticleModalOriginalLink.href = contentData.original_url;
 
     } catch (error) {
         console.error(`UIManager: Failed to fetch or display sanitized content for article ${articleId}:`, error);
-        fullArticleModalBody.innerHTML = `<p class="error-message">Error loading content: ${error.message}</p>`;
+        fullArticleModalBody.innerHTML = ''; // Clear loading message
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message');
+        errorP.textContent = `Error loading content: ${error.message}`;
+        fullArticleModalBody.appendChild(errorP);
     }
 }
 

@@ -110,9 +110,15 @@ async function fetchAndDisplaySummaries(forceBackendRssRefresh = false, page = s
 
     } catch (error) {
         console.error('MainScript: Error fetching or displaying summaries:', error);
-        const errorMessage = `<p class="error-message">Error fetching summaries: ${error.message}.</p>`;
-        if (page === 1 && !isPollRefresh) { 
-            uiManager.setResultsContainerContent(errorMessage);
+        if (page === 1 && !isPollRefresh) {
+            const errorP = document.createElement('p');
+            errorP.classList.add('error-message');
+            errorP.textContent = `Error fetching summaries: ${error.message}.`;
+            const resultsContainer = document.getElementById('results-container');
+            if (resultsContainer) {
+                resultsContainer.innerHTML = '';
+                resultsContainer.appendChild(errorP);
+            }
         } else if (page > 1) {
             const resultsContainer = document.getElementById('results-container');
             if (resultsContainer) {
@@ -193,7 +199,14 @@ async function initializeAppSettings() {
 
     } catch (error) { 
         console.error("MainScript: Error during application initialization:", error);
-        uiManager.setResultsContainerContent(`<p class="error-message">Failed to initialize application: ${error.message}</p>`);
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message');
+        errorP.textContent = `Failed to initialize application: ${error.message}`;
+        const resultsContainer = document.getElementById('results-container');
+        if (resultsContainer) {
+            resultsContainer.innerHTML = '';
+            resultsContainer.appendChild(errorP);
+        }
     }
     finally { uiManager.showLoadingIndicator(false); }
     console.log("MainScript: Application settings initialization finished.");
@@ -315,8 +328,13 @@ async function summarizeArticle(articleId, customPrompt) {
         uiManager.updateArticleCard(updatedArticle, handleArticleTagClick);
     } catch (error) {
         console.error("MainScript: Error regenerating summary:", error);
-        const errorHtml = `<p class="error-message">Error: ${error.message}</p>`;
-        if (summaryElement) summaryElement.innerHTML = errorHtml;
+        if (summaryElement) {
+            summaryElement.innerHTML = '';
+            const errorP = document.createElement('p');
+            errorP.classList.add('error-message');
+            errorP.textContent = `Error: ${error.message}`;
+            summaryElement.appendChild(errorP);
+        }
         alert(`Failed to regenerate summary: ${error.message}`);
     } finally {
         if (regenButtonOnCard) regenButtonOnCard.disabled = false;

@@ -88,8 +88,12 @@ async function fetchAndDisplayChatHistoryForModal(articleId) {
         renderChatHistoryInModal(chatModalHistory, state.currentChatHistory);
     } catch (error) {
         console.error('ChatHandler: Error fetching or displaying chat history:', error);
-        if (chatModalHistory) { 
-            chatModalHistory.innerHTML = `<p class="error-message">Error loading chat history: ${error.message}</p>`;
+        if (chatModalHistory) {
+            chatModalHistory.innerHTML = ''; // Clear loading message
+            const errorP = document.createElement('p');
+            errorP.classList.add('error-message');
+            errorP.textContent = `Error loading chat history: ${error.message}`;
+            chatModalHistory.appendChild(errorP);
         }
     }
 }
