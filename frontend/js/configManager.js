@@ -174,7 +174,7 @@ async function saveConfiguration() {
 /**
  * Saves the content preference settings (articles per page, min word count).
  */
-export function saveContentPreferences(articlesPerPage, minWordCount, callback) {
+export async function saveContentPreferences(articlesPerPage, minWordCount, callback) {
     const newArticlesPerPage = parseInt(articlesPerPage);
     const newMinWordCount = parseInt(minWordCount);
 
@@ -190,7 +190,7 @@ export function saveContentPreferences(articlesPerPage, minWordCount, callback) 
     state.setArticlesPerPage(newArticlesPerPage);
     state.setMinimumWordCount(newMinWordCount);
     updateSetupUI();
-    saveConfiguration(); // Persist all settings
+    await saveConfiguration(); // Persist all settings
     state.setCurrentPage(1);
     if (callback && typeof callback === 'function') {
         callback();
@@ -266,9 +266,9 @@ export function setupFormEventListeners(callbacks = {}) {
         console.warn("ConfigManager: Forms not found, cannot attach event listeners.");
         return;
     }
-    contentPrefsForm.addEventListener('submit', (e) => {
+    contentPrefsForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        saveContentPreferences(numArticlesSetupInput.value, minimumWordCountSetupInput.value, callbacks.onArticlesPerPageChange);
+        await saveContentPreferences(numArticlesSetupInput.value, minimumWordCountSetupInput.value, callbacks.onArticlesPerPageChange);
     });
     aiPromptsForm.addEventListener('submit', (e) => {
         e.preventDefault();
