@@ -1,0 +1,21 @@
+INFO:app.main_api:MAIN_API: Including API routers...
+INFO:app.main_api:MAIN_API: All API routers included.
+INFO:app.main_api:MAIN_API: Static files mounted from 'frontend' directory at '/static'.
+INFO:app.main_api:MAIN_API: FastAPI application initialized and configured.
+INFO:     Started server process [2589]
+INFO:     Waiting for application startup.
+INFO:app.main_api:MAIN_API: Application startup sequence initiated...
+INFO:app.main_api:MAIN_API: Initializing databases...
+INFO:app.main_api:MAIN_API: Main article database tables checked/created successfully.
+INFO:app.main_api:MAIN_API: Settings database tables checked/created successfully.
+INFO:app.main_api:MAIN_API: No initial RSS_FEED_URLS configured in app_config to add to DB.
+INFO:app.main_api:MAIN_API: Attempting to initialize LLM instances from settings DB...
+CRITICAL:app.main_api:MAIN_API: CRITICAL ERROR - GEMINI_API_KEY not found. LLM features will be disabled.
+INFO:app.main_api:MAIN_API: Configuring APScheduler to run RSS feed updates every 60 minutes.
+INFO:apscheduler.scheduler:Adding job tentatively -- it will be properly scheduled when the scheduler starts
+INFO:apscheduler.scheduler:Added job "Periodic RSS Feed Update" to job store "default"
+INFO:apscheduler.scheduler:Scheduler started
+INFO:app.main_api:MAIN_API: APScheduler started successfully.
+INFO:app.main_api:MAIN_API: Application startup sequence complete.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)

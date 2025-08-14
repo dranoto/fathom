@@ -173,6 +173,7 @@ async function saveConfiguration() {
 
 /**
  * Saves the content preference settings (articles per page, min word count).
+ * This function now awaits the callback to fix a race condition.
  */
 export async function saveContentPreferences(articlesPerPage, minWordCount, callback) {
     const newArticlesPerPage = parseInt(articlesPerPage);
@@ -180,20 +181,36 @@ export async function saveContentPreferences(articlesPerPage, minWordCount, call
 
     if (isNaN(newArticlesPerPage) || newArticlesPerPage < 1 || newArticlesPerPage > 50) {
         alert('Please enter a number of articles per page between 1 and 50.');
-        return;
+        return; // No return value needed, just stop execution
     }
     if (isNaN(newMinWordCount) || newMinWordCount < 0 || newMinWordCount > 1000) {
         alert('Please enter a minimum word count between 0 and 1000.');
+        return; // No return value needed, just stop execution
+    }
+
+    // Check if the values have actually changed to prevent unnecessary saves and reloads
+    const hasChanged = newArticlesPerPage !== state.articlesPerPage || newMinWordCount !== state.minimumWordCount;
+    if (!hasChanged) {
+        console.log("ConfigManager: No changes detected in content preferences. Skipping save.");
+        // Even if no changes, we might still want to run the callback if one is provided,
+        // for instance, to simply refresh the view. However, in this specific flow,
+        // it's better to just exit to avoid unexpected reloads.
         return;
     }
 
     state.setArticlesPerPage(newArticlesPerPage);
     state.setMinimumWordCount(newMinWordCount);
     updateSetupUI();
+
     await saveConfiguration(); // Persist all settings
+
+    // This part is crucial for fixing the race condition.
+    // We reset the page and then *await the callback* which fetches the new data.
+    // The event listener that calls this function also awaits it, ensuring the
+    // entire sequence completes before anything else can happen.
     state.setCurrentPage(1);
     if (callback && typeof callback === 'function') {
-        callback();
+        await callback(); // Await the callback to ensure completion
     }
 }
 
