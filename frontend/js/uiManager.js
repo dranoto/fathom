@@ -18,6 +18,21 @@ let resultsContainer, loadingIndicator, loadingText, infiniteScrollLoadingIndica
 
 
 /**
+ * Truncates text to a specified word limit.
+ * @param {string} text - The text to truncate.
+ * @param {number} wordLimit - The maximum number of words.
+ * @returns {string} The truncated text with an ellipsis if it was shortened.
+ */
+function truncateText(text, wordLimit) {
+    if (!text) return "";
+    const words = text.trim().split(/\s+/);
+    if (words.length <= wordLimit) {
+        return text.trim();
+    }
+    return words.slice(0, wordLimit).join(" ") + "...";
+}
+
+/**
  * Initializes DOM references for UI elements.
  */
 export function initializeUIDOMReferences() {
@@ -248,7 +263,8 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         } else {
             const descriptionP = document.createElement('p');
             descriptionP.classList.add('content-snippet'); // Re-using class for styling
-            descriptionP.textContent = article.rss_description || "No summary or description available.";
+            const truncatedDescription = truncateText(article.rss_description, 100);
+            descriptionP.textContent = truncatedDescription || "No summary or description available.";
             summaryContainer.appendChild(descriptionP);
 
             const summarizeBtn = document.createElement('button');
