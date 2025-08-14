@@ -68,6 +68,7 @@ class ArticleResult(BaseModel):
     is_favorite: bool = False
     error_message: Optional[str] = None
     is_summarizable: bool = False
+    word_count: Optional[int] = None
     class Config: from_attributes = True
 
 class PaginatedSummariesAPIResponse(BaseModel):
