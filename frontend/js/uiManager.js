@@ -92,21 +92,29 @@ export async function openAndLoadFullArticleModal(articleId, articleTitle, origi
 
     try {
         const contentData = await apiService.fetchSanitizedArticleContent(articleId);
+        fullArticleModalBody.innerHTML = ''; // Clear loading message
         if (contentData.error_message) {
-            fullArticleModalBody.innerHTML = `<p class="error-message">${contentData.error_message}</p>`;
-            // Corrected logger usage:
+            const errorP = document.createElement('p');
+            errorP.classList.add('error-message');
+            errorP.textContent = contentData.error_message;
+            fullArticleModalBody.appendChild(errorP);
             console.warn(`UIManager: Error fetching sanitized content for article ${articleId}: ${contentData.error_message}`);
         } else if (contentData.sanitized_html_content) {
+            // Assuming sanitized_html_content is already sanitized by the backend
             fullArticleModalBody.innerHTML = contentData.sanitized_html_content;
         } else {
-            fullArticleModalBody.innerHTML = "<p>Full article content could not be loaded or is empty.</p>";
+            fullArticleModalBody.textContent = "Full article content could not be loaded or is empty.";
         }
         if(contentData.title) fullArticleModalTitle.textContent = contentData.title;
         if(contentData.original_url) fullArticleModalOriginalLink.href = contentData.original_url;
 
     } catch (error) {
         console.error(`UIManager: Failed to fetch or display sanitized content for article ${articleId}:`, error);
-        fullArticleModalBody.innerHTML = `<p class="error-message">Error loading content: ${error.message}</p>`;
+        fullArticleModalBody.innerHTML = ''; // Clear loading message
+        const errorP = document.createElement('p');
+        errorP.classList.add('error-message');
+        errorP.textContent = `Error loading content: ${error.message}`;
+        fullArticleModalBody.appendChild(errorP);
     }
 }
 
@@ -125,7 +133,7 @@ export function closeFullArticleModal() {
 /**
  * Displays article results in the results container.
  */
-export function displayArticleResults(articles, clearPrevious, onTagClickCallback, onRegenerateClickCallback, onFavoriteClickCallback) {
+export function displayArticleResults(articles, clearPrevious, onTagClickCallback, onRegenerateClickCallback, onFavoriteClickCallback, onSummarizeClickCallback) {
     if (!resultsContainer) {
         console.error("UIManager: resultsContainer is null! Cannot display articles.");
         return;
@@ -229,7 +237,9 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         summaryContainer.setAttribute('id', `summary-text-${article.id}`);
 
         if (article.summary) {
-            summaryContainer.innerHTML = typeof marked !== 'undefined' ? marked.parse(article.summary) : article.summary;
+            summaryContainer.innerHTML = (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined')
+                ? DOMPurify.sanitize(marked.parse(article.summary))
+                : article.summary;
         } else {
             const descriptionP = document.createElement('p');
             descriptionP.classList.add('content-snippet'); // Re-using class for styling
@@ -240,8 +250,9 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
             summarizeBtn.textContent = 'Summarize with AI';
             summarizeBtn.classList.add('summarize-ai-btn');
             summarizeBtn.onclick = () => {
-                if (onRegenerateClickCallback && typeof onRegenerateClickCallback === 'function') {
-                    onRegenerateClickCallback(article.id);
+                // Use the new, specific callback for this button
+                if (onSummarizeClickCallback && typeof onSummarizeClickCallback === 'function') {
+                    onSummarizeClickCallback(article.id);
                 }
             };
             if (!article.is_summarizable) {
@@ -251,9 +262,13 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         }
         articleCard.appendChild(summaryContainer);
 
+        // Always create the tags container for future updates
+        const tagsContainer = document.createElement('div');
+        tagsContainer.classList.add('article-tags-container');
+        tagsContainer.setAttribute('id', `tags-container-${article.id}`);
+        articleCard.appendChild(tagsContainer);
+
         if (article.tags && article.tags.length > 0) {
-            const tagsContainer = document.createElement('div');
-            tagsContainer.classList.add('article-tags-container');
             article.tags.forEach(tag => {
                 const tagEl = document.createElement('span');
                 tagEl.classList.add('article-tag');
@@ -270,13 +285,16 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
                 };
                 tagsContainer.appendChild(tagEl);
             });
-            articleCard.appendChild(tagsContainer);
         }
 
         if (article.error_message && !article.summary) {
             const err = document.createElement('p');
             err.classList.add('error-message');
-            err.innerHTML = typeof marked !== 'undefined' ? marked.parse(article.error_message) : article.error_message;
+            if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+                err.innerHTML = DOMPurify.sanitize(marked.parse(article.error_message));
+            } else {
+                err.textContent = article.error_message; // Safe fallback
+            }
             articleCard.appendChild(err);
         }
 
@@ -483,6 +501,75 @@ export function setupUIManagerEventListeners(onRegenerateModalUseDefaultPrompt) 
     }
     console.log("UIManager: Basic event listeners set up.");
 }
+
+/**
+ * Updates a specific article card with new data (summary and tags).
+ * This is more efficient than re-rendering the whole feed.
+ * @param {object} article - The updated article object from the API.
+ * @param {function} onTagClickCallback - The callback function to handle tag clicks.
+ */
+export function updateArticleCard(article, onTagClickCallback) {
+    if (!article || !article.id) {
+        console.error("UIManager: updateArticleCard called with invalid article data.");
+        return;
+    }
+
+    const articleCard = document.getElementById(`article-db-${article.id}`);
+    if (!articleCard) {
+        console.warn(`UIManager: Could not find article card with ID article-db-${article.id} to update.`);
+        return;
+    }
+
+    // Update Summary
+    const summaryContainer = articleCard.querySelector(`#summary-text-${article.id}`);
+    if (summaryContainer) {
+        if (article.summary) {
+            summaryContainer.innerHTML = (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined')
+                ? DOMPurify.sanitize(marked.parse(article.summary))
+                : article.summary;
+        } else {
+            // If the summary is empty after regeneration, show an error or a message.
+            summaryContainer.innerHTML = `<p class="error-message">Could not generate a summary.</p>`;
+        }
+        if (article.error_message) {
+            const errorP = document.createElement('p');
+            errorP.classList.add('error-message');
+            if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+                errorP.innerHTML = DOMPurify.sanitize(marked.parse(article.error_message));
+            } else {
+                errorP.textContent = article.error_message; // Safe fallback
+            }
+            summaryContainer.appendChild(errorP);
+        }
+    }
+
+    // Update Tags
+    const tagsContainer = articleCard.querySelector(`#tags-container-${article.id}`);
+    if (tagsContainer) {
+        tagsContainer.innerHTML = ''; // Clear existing tags
+        if (article.tags && article.tags.length > 0) {
+            article.tags.forEach(tag => {
+                const tagEl = document.createElement('span');
+                tagEl.classList.add('article-tag');
+                tagEl.textContent = tag.name;
+                tagEl.setAttribute('data-tag-id', tag.id.toString());
+                tagEl.setAttribute('data-tag-name', tag.name);
+                if (state.activeTagFilterIds.some(activeTag => activeTag.id === tag.id)) {
+                    tagEl.classList.add('active-filter-tag');
+                }
+                tagEl.onclick = () => {
+                    if (onTagClickCallback && typeof onTagClickCallback === 'function') {
+                        onTagClickCallback(tag.id, tag.name);
+                    }
+                };
+                tagsContainer.appendChild(tagEl);
+            });
+        }
+    }
+
+    console.log(`UIManager: Successfully updated article card for ID ${article.id}.`);
+}
+
 
 /**
  * Sets the content of the results container.

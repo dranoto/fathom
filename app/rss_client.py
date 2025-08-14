@@ -178,14 +178,18 @@ async def fetch_and_store_articles_from_feed(db: Session, feed_source: RSSFeedSo
             continue
 
         # NEW: Extract and clean RSS description to plain text
-        # Prioritize 'summary' as it's often cleaner, then 'description'.
-        raw_description = feed_entry_data.get('summary', feed_entry_data.get('description'))
+        raw_description = None
+        # First, try to get the full content from 'summary_detail'.
+        if 'summary_detail' in feed_entry_data and feed_entry_data['summary_detail'].get('value'):
+            raw_description = feed_entry_data['summary_detail']['value']
 
-        # Fallback to the 'content' field if summary/description are missing.
-        # feedparser can return 'content' as a list of content objects.
+        # If not found, fall back to 'summary', then 'description'.
+        if not raw_description:
+            raw_description = feed_entry_data.get('summary', feed_entry_data.get('description'))
+
+        # As a final fallback, check the 'content' field.
         if not raw_description and 'content' in feed_entry_data:
             if isinstance(feed_entry_data['content'], list) and feed_entry_data['content']:
-                # feedparser content is a list of dicts, each with a 'value' key.
                 content_block = feed_entry_data['content'][0]
                 if isinstance(content_block, dict) and 'value' in content_block:
                     raw_description = content_block['value']
