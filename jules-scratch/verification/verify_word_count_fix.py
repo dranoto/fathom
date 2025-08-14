@@ -19,7 +19,7 @@ def run_verification(playwright):
         min_word_count_input.fill("800")
 
         # Click the save button for the content preferences form
-        page.get_by_role("form", target="#content-prefs-form").get_by_role("button", name="Save").click()
+        page.locator("#content-prefs-form").get_by_role("button", name="Save").click()
 
         # Handle the alert
         page.once("dialog", lambda dialog: dialog.accept())
