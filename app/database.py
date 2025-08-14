@@ -1,6 +1,7 @@
 # app/database.py
 import os
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey, UniqueConstraint, Index, Table, inspect, Boolean
+from sqlalchemy.types import JSON
 from sqlalchemy.orm import sessionmaker, Session as SQLAlchemySession, relationship, declarative_base # Mapped, mapped_column for newer SQLAlchemy
 from sqlalchemy.sql import func, text
 from contextlib import contextmanager
@@ -102,6 +103,9 @@ class Article(Base):
     # NEW: To store the plain-text description from the RSS feed entry.
     rss_description = Column(Text, nullable=True)
 
+    # NEW: To store the entire RSS item as a JSON object for future use.
+    raw_rss_item = Column(JSON, nullable=True)
+
     # This field will store the primary textual content, often extracted as innerText or a cleaned version.
     scraped_text_content = Column(Text, nullable=True)
     
@@ -201,7 +205,8 @@ def create_db_and_tables():
             ('rss_description', 'TEXT'),
             ('full_html_content', 'TEXT'),
             ('word_count', 'INTEGER'),
-            ('is_favorite', 'BOOLEAN')
+            ('is_favorite', 'BOOLEAN'),
+            ('raw_rss_item', 'JSON')
         ]
 
         with engine.connect() as connection:
