@@ -226,9 +226,14 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         }
         if (metaInfo.hasChildNodes()) articleCard.appendChild(metaInfo);
 
-        const readFullArticleBtn = document.createElement('button'); 
-        readFullArticleBtn.textContent = 'Read Full Article (In-App)';
-        readFullArticleBtn.classList.add('read-full-article-btn'); 
+        const readFullArticleBtn = document.createElement('button');
+        let buttonText = 'Read Full Article (In-App)';
+        // As an informational feature, display word count if available
+        if (article.word_count != null) {
+            buttonText = `Read Full Article (${article.word_count} words)`;
+        }
+        readFullArticleBtn.textContent = buttonText;
+        readFullArticleBtn.classList.add('read-full-article-btn');
         readFullArticleBtn.onclick = () => openAndLoadFullArticleModal(article.id, article.title, article.url);
         articleCard.appendChild(readFullArticleBtn);
 

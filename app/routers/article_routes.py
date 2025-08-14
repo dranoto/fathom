@@ -94,7 +94,8 @@ def _create_article_result(
         is_favorite=bool(article_db_obj.is_favorite),
         is_summarizable=is_summarizable,
         error_message=error_message,
-        rss_description=article_db_obj.rss_description
+        rss_description=article_db_obj.rss_description,
+        word_count=article_db_obj.word_count
     )
 
 
@@ -140,9 +141,10 @@ async def get_news_summaries_endpoint(
     except (ValueError, TypeError):
         min_word_count_threshold = 100
 
-    # Apply the word count filter if no other specific filters are active.
+    # Apply the word count filter UNLESS a keyword search is active.
+    # A keyword search should be able to find text in any article, regardless of length.
     # This now includes articles where word_count is NULL (i.e., legacy articles)
-    if not query.feed_source_ids and not query.tag_ids and not query.keyword:
+    if not query.keyword:
         db_query = db_query.filter(
             or_(
                 database.Article.word_count >= min_word_count_threshold,
