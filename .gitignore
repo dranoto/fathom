@@ -12,6 +12,7 @@ VENV/
 *.egg-info/
 *.DS_Store
 *.log
+*.db
 
 # Docker (local build artifacts, usually not needed if just Dockerfile is shared)
 
