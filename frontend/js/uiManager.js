@@ -290,9 +290,11 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         if (article.error_message && !article.summary) {
             const err = document.createElement('p');
             err.classList.add('error-message');
-            err.innerHTML = (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined')
-                ? DOMPurify.sanitize(marked.parse(article.error_message))
-                : article.error_message;
+            if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+                err.innerHTML = DOMPurify.sanitize(marked.parse(article.error_message));
+            } else {
+                err.textContent = article.error_message; // Safe fallback
+            }
             articleCard.appendChild(err);
         }
 
@@ -530,10 +532,14 @@ export function updateArticleCard(article, onTagClickCallback) {
             summaryContainer.innerHTML = `<p class="error-message">Could not generate a summary.</p>`;
         }
         if (article.error_message) {
-            const sanitizedError = (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined')
-                ? DOMPurify.sanitize(marked.parse(article.error_message))
-                : article.error_message;
-            summaryContainer.innerHTML += `<p class="error-message">${sanitizedError}</p>`;
+            const errorP = document.createElement('p');
+            errorP.classList.add('error-message');
+            if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+                errorP.innerHTML = DOMPurify.sanitize(marked.parse(article.error_message));
+            } else {
+                errorP.textContent = article.error_message; // Safe fallback
+            }
+            summaryContainer.appendChild(errorP);
         }
     }
 
