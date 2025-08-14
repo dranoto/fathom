@@ -228,8 +228,8 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
 
         const readFullArticleBtn = document.createElement('button');
         let buttonText = 'Read Full Article (In-App)';
-        // As a debug step, display word count if available
-        if (article.word_count !== null && article.word_count !== undefined) {
+        // As an informational feature, display word count if available
+        if (article.word_count != null) {
             buttonText = `Read Full Article (${article.word_count} words)`;
         }
         readFullArticleBtn.textContent = buttonText;
