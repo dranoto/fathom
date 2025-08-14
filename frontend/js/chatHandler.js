@@ -45,9 +45,14 @@ function renderChatHistoryInModal(responseDiv, historyArray) {
         
         const content = chatItem.content || (chatItem.role === 'ai' ? "Processing..." : "");
         try {
-            if (typeof marked !== 'undefined') {
+            if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+                const sanitizedContent = DOMPurify.sanitize(marked.parse(content));
+                messageDiv.innerHTML = `<strong>${chatItem.role === 'user' ? 'You' : 'AI'}:</strong> ${sanitizedContent}`;
+            } else if (typeof marked !== 'undefined') {
+                // Fallback if DOMPurify is somehow not loaded
                 messageDiv.innerHTML = `<strong>${chatItem.role === 'user' ? 'You' : 'AI'}:</strong> ${marked.parse(content)}`;
-            } else {
+            }
+            else {
                 messageDiv.innerHTML = `<strong>${chatItem.role === 'user' ? 'You' : 'AI'}:</strong> ${content.replace(/\n/g, '<br>')}`;
             }
         } catch (e) {
@@ -103,10 +108,14 @@ export function openArticleChatModal(articleData) {
 
     // Populate article preview in the modal
     // REMOVED the "Read Full Article" link from this preview
+    const summaryHtml = (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined')
+        ? DOMPurify.sanitize(marked.parse(articleData.summary || 'No summary available.'))
+        : (articleData.summary || 'No summary available.');
+
     chatModalArticlePreviewContent.innerHTML = `
         <h4>${articleData.title || 'No Title'}</h4>
         <div class="article-summary-preview">
-            ${typeof marked !== 'undefined' ? marked.parse(articleData.summary || 'No summary available.') : (articleData.summary || 'No summary available.')}
+            ${summaryHtml}
         </div>
         <p class="chat-modal-source-info">
             Source: ${articleData.publisher || 'N/A'} | 

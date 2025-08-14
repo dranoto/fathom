@@ -229,7 +229,9 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         summaryContainer.setAttribute('id', `summary-text-${article.id}`);
 
         if (article.summary) {
-            summaryContainer.innerHTML = typeof marked !== 'undefined' ? marked.parse(article.summary) : article.summary;
+            summaryContainer.innerHTML = (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined')
+                ? DOMPurify.sanitize(marked.parse(article.summary))
+                : article.summary;
         } else {
             const descriptionP = document.createElement('p');
             descriptionP.classList.add('content-snippet'); // Re-using class for styling
@@ -280,7 +282,9 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         if (article.error_message && !article.summary) {
             const err = document.createElement('p');
             err.classList.add('error-message');
-            err.innerHTML = typeof marked !== 'undefined' ? marked.parse(article.error_message) : article.error_message;
+            err.innerHTML = (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined')
+                ? DOMPurify.sanitize(marked.parse(article.error_message))
+                : article.error_message;
             articleCard.appendChild(err);
         }
 
@@ -510,13 +514,18 @@ export function updateArticleCard(article, onTagClickCallback) {
     const summaryContainer = articleCard.querySelector(`#summary-text-${article.id}`);
     if (summaryContainer) {
         if (article.summary) {
-            summaryContainer.innerHTML = typeof marked !== 'undefined' ? marked.parse(article.summary) : article.summary;
+            summaryContainer.innerHTML = (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined')
+                ? DOMPurify.sanitize(marked.parse(article.summary))
+                : article.summary;
         } else {
             // If the summary is empty after regeneration, show an error or a message.
             summaryContainer.innerHTML = `<p class="error-message">Could not generate a summary.</p>`;
         }
         if (article.error_message) {
-            summaryContainer.innerHTML += `<p class="error-message">${article.error_message}</p>`;
+            const sanitizedError = (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined')
+                ? DOMPurify.sanitize(marked.parse(article.error_message))
+                : article.error_message;
+            summaryContainer.innerHTML += `<p class="error-message">${sanitizedError}</p>`;
         }
     }
 
