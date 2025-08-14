@@ -93,7 +93,8 @@ def _create_article_result(
         tags=[ArticleTagResponse.from_orm(tag) for tag in article_db_obj.tags],
         is_favorite=bool(article_db_obj.is_favorite),
         is_summarizable=is_summarizable,
-        error_message=error_message
+        error_message=error_message,
+        rss_description=article_db_obj.rss_description
     )
 
 
