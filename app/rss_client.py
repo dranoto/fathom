@@ -2,6 +2,7 @@
 import feedparser
 import asyncio
 import logging # Added logging
+import json
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -219,6 +220,10 @@ async def fetch_and_store_articles_from_feed(db: Session, feed_source: RSSFeedSo
 
         word_count_to_save = scraped_doc.metadata.get('word_count', 0)
 
+        # Convert the feedparser entry to a JSON string.
+        # Using default=str handles potential non-serializable types like time.struct_time.
+        raw_rss_item_json = json.dumps(feed_entry_data, default=str)
+
         new_article = Article(
             feed_source_id=feed_source.id,
             url=article_url,
@@ -226,6 +231,7 @@ async def fetch_and_store_articles_from_feed(db: Session, feed_source: RSSFeedSo
             publisher_name=feed_source.name or feed_title_from_rss,
             published_date=published_date_dt,
             rss_description=plain_text_description,
+            raw_rss_item=raw_rss_item_json,
             scraped_text_content=text_content_to_save,
             full_html_content=html_content_to_save,
             word_count=word_count_to_save

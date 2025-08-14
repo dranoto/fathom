@@ -102,6 +102,9 @@ class Article(Base):
     # NEW: To store the plain-text description from the RSS feed entry.
     rss_description = Column(Text, nullable=True)
 
+    # NEW: To store the entire RSS item as a JSON string for future use.
+    raw_rss_item = Column(Text, nullable=True)
+
     # This field will store the primary textual content, often extracted as innerText or a cleaned version.
     scraped_text_content = Column(Text, nullable=True)
     
@@ -201,7 +204,8 @@ def create_db_and_tables():
             ('rss_description', 'TEXT'),
             ('full_html_content', 'TEXT'),
             ('word_count', 'INTEGER'),
-            ('is_favorite', 'BOOLEAN')
+            ('is_favorite', 'BOOLEAN'),
+            ('raw_rss_item', 'TEXT')
         ]
 
         with engine.connect() as connection:
