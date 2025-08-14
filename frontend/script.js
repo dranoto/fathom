@@ -75,10 +75,11 @@ async function fetchAndDisplaySummaries(forceBackendRssRefresh = false, page = s
 
         uiManager.displayArticleResults(
             data.processed_articles_on_page,
-            page === 1, 
-            handleArticleTagClick, 
+            page === 1,
+            handleArticleTagClick,
             uiManager.openRegenerateSummaryModal,
-            handleFavoriteClick
+            handleFavoriteClick,
+            handleDirectSummarize // Pass the new handler
         );
 
         if (page === 1 && data.processed_articles_on_page && data.processed_articles_on_page.length > 0) {
@@ -286,27 +287,40 @@ async function handleRegenerateSummaryFormSubmit(event) {
     let customPrompt = customPromptEl.value.trim();
     if (!articleId) { alert("Error: Article ID not found for regeneration."); return; }
     if (customPrompt && !customPrompt.includes("{text}")) { alert("The custom prompt must include the placeholder {text}."); return; }
-    if (!customPrompt) customPrompt = null; 
+    if (!customPrompt) customPrompt = null;
+
+    uiManager.closeRegenerateSummaryModal();
+    await summarizeArticle(articleId, customPrompt);
+}
+
+async function handleDirectSummarize(articleId) {
+    console.log(`MainScript: Direct summarization triggered for Article ID: ${articleId}`);
+    await summarizeArticle(articleId, null); // Pass null to use the default prompt
+}
+
+async function summarizeArticle(articleId, customPrompt) {
     const summaryElement = document.getElementById(`summary-text-${articleId}`);
     const articleCardElement = document.getElementById(`article-db-${articleId}`);
     const regenButtonOnCard = articleCardElement ? articleCardElement.querySelector('.regenerate-summary-btn') : null;
-    if (summaryElement) summaryElement.innerHTML = (typeof marked !== 'undefined' ? marked.parse("Regenerating summary...") : "Regenerating summary...");
+    const summarizeButton = articleCardElement ? articleCardElement.querySelector('.summarize-ai-btn') : null;
+
+    if (summaryElement) {
+        summaryElement.innerHTML = (typeof marked !== 'undefined' ? marked.parse("Regenerating summary...") : "Regenerating summary...");
+    }
     if (regenButtonOnCard) regenButtonOnCard.disabled = true;
-    uiManager.closeRegenerateSummaryModal();
+    if (summarizeButton) summarizeButton.disabled = true;
+
     try {
         const updatedArticle = await apiService.regenerateSummary(articleId, { custom_prompt: customPrompt });
-        if (summaryElement) {
-            summaryElement.innerHTML = typeof marked !== 'undefined' ? marked.parse(updatedArticle.summary || "Summary regenerated, but no content returned.") : (updatedArticle.summary || "Summary regenerated, but no content returned.");
-            if (updatedArticle.error_message) {
-                 summaryElement.innerHTML += `<p class="error-message">${updatedArticle.error_message}</p>`;
-            }
-        }
+        uiManager.updateArticleCard(updatedArticle, handleArticleTagClick);
     } catch (error) {
         console.error("MainScript: Error regenerating summary:", error);
-        if (summaryElement) summaryElement.innerHTML = `<p class="error-message">Error: ${error.message}</p>`;
+        const errorHtml = `<p class="error-message">Error: ${error.message}</p>`;
+        if (summaryElement) summaryElement.innerHTML = errorHtml;
         alert(`Failed to regenerate summary: ${error.message}`);
     } finally {
         if (regenButtonOnCard) regenButtonOnCard.disabled = false;
+        if (summarizeButton) summarizeButton.disabled = false;
     }
 }
 
@@ -325,20 +339,24 @@ function setupGlobalEventListeners() {
 
     if (navMainBtn) {
         navMainBtn.addEventListener('click', () => {
-            if (state.activeView === 'main') return; // Don't re-fetch if already on main
+            if (state.activeView === 'main' && document.getElementById('main-feed-section').classList.contains('active')) return;
+
+            uiManager.showSection('main-feed-section');
             state.setActiveView('main');
             state.setCurrentPage(1);
             fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch);
-            uiManager.updateNavButtonStyles(); // New function to be added to uiManager
+            uiManager.updateNavButtonStyles();
         });
     }
 
     if (navFavoritesBtn) {
         navFavoritesBtn.addEventListener('click', () => {
-            if (state.activeView === 'favorites') return; // Don't re-fetch if already on favorites
+            if (state.activeView === 'favorites') return;
+
+            uiManager.showSection('main-feed-section');
             state.setActiveView('favorites');
             state.setCurrentPage(1);
-            // Clear other filters when switching to favorites
+
             state.setActiveFeedFilterIds([]);
             state.setActiveTagFilterIds([]);
             state.setCurrentKeywordSearch(null);
@@ -346,7 +364,7 @@ function setupGlobalEventListeners() {
             if(keywordInput) keywordInput.value = '';
 
             fetchAndDisplaySummaries(false, 1, null);
-            uiManager.updateNavButtonStyles(); // New function to be added to uiManager
+            uiManager.updateNavButtonStyles();
         });
     }
 
