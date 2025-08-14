@@ -2,7 +2,6 @@
 import feedparser
 import asyncio
 import logging # Added logging
-import json
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -83,6 +82,22 @@ def _normalize_datetime(dt_input: Any) -> Optional[datetime]:
         logger.warning(f"RSS_CLIENT: Failed to normalize date input: {dt_input}")
         return None
     return parsed_date
+
+
+def _make_entry_serializable(entry: dict) -> dict:
+    """
+    Converts a feedparser entry into a JSON-serializable dictionary.
+    Specifically handles time.struct_time objects by converting them to ISO 8601 strings.
+    """
+    serializable_entry = dict(entry)
+    for key, value in serializable_entry.items():
+        if key.endswith('_parsed') and value:
+            # _normalize_datetime returns a timezone-aware datetime object
+            dt_obj = _normalize_datetime(value)
+            if dt_obj:
+                # Convert to ISO 8601 string format
+                serializable_entry[key] = dt_obj.isoformat()
+    return serializable_entry
 
 
 async def fetch_and_store_articles_from_feed(db: Session, feed_source: RSSFeedSource) -> int:
@@ -220,9 +235,7 @@ async def fetch_and_store_articles_from_feed(db: Session, feed_source: RSSFeedSo
 
         word_count_to_save = scraped_doc.metadata.get('word_count', 0)
 
-        # Convert the feedparser entry to a JSON string.
-        # Using default=str handles potential non-serializable types like time.struct_time.
-        raw_rss_item_json = json.dumps(feed_entry_data, default=str)
+        serializable_entry = _make_entry_serializable(feed_entry_data)
 
         new_article = Article(
             feed_source_id=feed_source.id,
@@ -231,7 +244,7 @@ async def fetch_and_store_articles_from_feed(db: Session, feed_source: RSSFeedSo
             publisher_name=feed_source.name or feed_title_from_rss,
             published_date=published_date_dt,
             rss_description=plain_text_description,
-            raw_rss_item=raw_rss_item_json,
+            raw_rss_item=serializable_entry,
             scraped_text_content=text_content_to_save,
             full_html_content=html_content_to_save,
             word_count=word_count_to_save
