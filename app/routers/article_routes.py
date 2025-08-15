@@ -371,17 +371,16 @@ async def regenerate_article_summary(
         }
     )
     prompt_to_use = request_body.custom_prompt if request_body.custom_prompt and request_body.custom_prompt.strip() else app_config.DEFAULT_SUMMARY_PROMPT
-    new_summary_text = await summarizer.summarize_document_content(lc_doc_for_summary_regen, llm_summary, prompt_to_use)
 
-    # If summarization returns an error, do not delete the old summary.
-    # Instead, return the error message in the response.
-    if new_summary_text.startswith("Error:") or new_summary_text == "Content too short or empty to summarize.":
-        logger.warning(f"API Regenerate: Summarization failed for Article ID {article_id}: {new_summary_text}")
+    try:
+        new_summary_text = await summarizer.summarize_document_content(lc_doc_for_summary_regen, llm_summary, prompt_to_use)
+    except summarizer.SummarizationError as e:
+        logger.warning(f"API Regenerate: Summarization failed for Article ID {article_id}: {e}")
         return _create_article_result(
             article_db_obj=article_db,
             db=db,
             min_word_count_threshold=min_word_count_threshold,
-            error_message=new_summary_text
+            error_message=str(e)
         )
 
     # --- Deletion and Creation Logic ---
