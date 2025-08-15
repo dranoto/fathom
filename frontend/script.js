@@ -356,19 +356,19 @@ function setupGlobalEventListeners() {
     const navFavoritesBtn = document.getElementById('nav-favorites-btn');
 
     if (navMainBtn) {
-        navMainBtn.addEventListener('click', () => {
+        navMainBtn.addEventListener('click', async () => {
             if (state.activeView === 'main' && document.getElementById('main-feed-section').classList.contains('active')) return;
 
             uiManager.showSection('main-feed-section');
             state.setActiveView('main');
             state.setCurrentPage(1);
-            fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch);
+            await fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch);
             uiManager.updateNavButtonStyles();
         });
     }
 
     if (navFavoritesBtn) {
-        navFavoritesBtn.addEventListener('click', () => {
+        navFavoritesBtn.addEventListener('click', async () => {
             if (state.activeView === 'favorites') return;
 
             uiManager.showSection('main-feed-section');
@@ -381,7 +381,7 @@ function setupGlobalEventListeners() {
             const keywordInput = document.getElementById('keyword-search-input');
             if(keywordInput) keywordInput.value = '';
 
-            fetchAndDisplaySummaries(false, 1, null);
+            await fetchAndDisplaySummaries(false, 1, null);
             uiManager.updateNavButtonStyles();
         });
     }
