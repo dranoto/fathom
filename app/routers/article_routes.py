@@ -362,10 +362,32 @@ async def regenerate_article_summary(
             error_message=error_msg_response
         )
 
-    lc_doc_for_summary_regen = LangchainDocument(page_content=current_text_content, metadata={"source": str(article_db.url), "id": article_db.id})
+    lc_doc_for_summary_regen = LangchainDocument(
+        page_content=current_text_content,
+        metadata={
+            "source": str(article_db.url),
+            "id": article_db.id,
+            "full_html_content": article_db.full_html_content,
+        }
+    )
     prompt_to_use = request_body.custom_prompt if request_body.custom_prompt and request_body.custom_prompt.strip() else app_config.DEFAULT_SUMMARY_PROMPT
     new_summary_text = await summarizer.summarize_document_content(lc_doc_for_summary_regen, llm_summary, prompt_to_use)
+
+    # If summarization returns an error, do not delete the old summary.
+    # Instead, return the error message in the response.
+    if new_summary_text.startswith("Error:") or new_summary_text == "Content too short or empty to summarize.":
+        logger.warning(f"API Regenerate: Summarization failed for Article ID {article_id}: {new_summary_text}")
+        return _create_article_result(
+            article_db_obj=article_db,
+            db=db,
+            min_word_count_threshold=min_word_count_threshold,
+            error_message=new_summary_text
+        )
+
+    # --- Deletion and Creation Logic ---
+    # Only delete the old summary if a new one was successfully generated.
     db.query(database.Summary).filter(database.Summary.article_id == article_id).delete(synchronize_session=False)
+
     model_name = settings_database.get_setting(settings_db, "summary_model_name", app_config.DEFAULT_SUMMARY_MODEL_NAME)
     new_summary_db_obj = database.Summary(article_id=article_id, summary_text=new_summary_text, prompt_used=prompt_to_use, model_used=model_name)
     db.add(new_summary_db_obj)
