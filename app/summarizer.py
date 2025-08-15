@@ -14,6 +14,10 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+class SummarizationError(Exception):
+    """Custom exception for errors during summarization."""
+    pass
+
 # --- LLM Initialization --- (assuming this remains the same)
 def initialize_llm(api_key: str, model_name: str, temperature: float = 0.3, max_output_tokens: int = 1024):
     """
@@ -56,7 +60,7 @@ async def summarize_document_content(
     """
     if not llm_instance:
         logger.error("Summarization LLM not available.")
-        return "Error: Summarization LLM not available."
+        raise SummarizationError("Summarization LLM not available.")
 
     current_content_to_summarize = doc.page_content #
     content_source_description = "plain text"
@@ -123,7 +127,7 @@ async def summarize_document_content(
             f"Selected content ({content_source_description}) for '{doc.metadata.get('source', 'Unknown')}' "
             f"is still too short (length: {len(current_content_to_summarize.strip() if current_content_to_summarize else 0)}) or empty to summarize."
         )
-        return "Content too short or empty to summarize."
+        raise SummarizationError("Content too short or empty to summarize.")
 
     try:
         prompt_template = get_summarization_prompt_template(custom_prompt_str)
@@ -148,7 +152,7 @@ async def summarize_document_content(
                 f"Empty summary received from LLM for URL: {document_for_chain.metadata.get('source', 'Unknown URL')} "
                 f"(summarized from {content_source_description})."
             )
-            return "Error: Summary generation resulted in empty output." #
+            raise SummarizationError("Summary generation resulted in empty output.")
         
         logger.info(
             f"Successfully summarized URL: {document_for_chain.metadata.get('source', 'Unknown URL')} "
@@ -160,7 +164,7 @@ async def summarize_document_content(
             f"ERROR during summarization for doc '{doc.metadata.get('source', 'Unknown URL')}' "
             f"(using {content_source_description}): {e}", exc_info=True
         )
-        return f"Error generating summary: {str(e)}" #
+        raise SummarizationError(f"Error generating summary: {str(e)}") from e
 
 # --- Tag Generation Specifics --- (assuming this and get_chat_response remain the same)
 # ... (rest of your summarizer.py file)
