@@ -189,7 +189,8 @@ async function initializeAppSettings() {
         // With feeds loaded from initial-config, we can now render them directly from state
         // without another API call. This is part of the fix for the disappearing articles bug.
         feedHandler.renderFeedsFromState();
-        uiManager.renderFeedFilterButtons(handleFeedFilterClick, handleAllFeedsClick);
+        uiManager.populateFeedFilterDropdown();
+        uiManager.initializeFeedFilterDropdown();
 
         uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter); 
         uiManager.showSection('main-feed-section'); 
@@ -277,9 +278,10 @@ function handleFeedFilterClick(feedId) {
     state.setActiveTagFilterIds([]);
     state.setCurrentKeywordSearch(null);
     state.setActiveView('main');
-    const keywordInput = document.getElementById('keyword-search-input'); // Get ref here
+    const keywordInput = document.getElementById('keyword-search-input');
     if(keywordInput) keywordInput.value = '';
     uiManager.updateFeedFilterButtonStyles();
+    uiManager.updateFeedFilterDropdownSelection();
     uiManager.updateNavButtonStyles();
     uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter);
     state.setCurrentPage(1);
@@ -292,6 +294,7 @@ function handleAllFeedsClick() {
     if (state.activeFeedFilterIds.length === 0 && state.activeTagFilterIds.length === 0 && !state.currentKeywordSearch) return; 
     state.setActiveFeedFilterIds([]);
     uiManager.updateFeedFilterButtonStyles();
+    uiManager.updateFeedFilterDropdownSelection();
     state.setCurrentPage(1);
     updateRefreshButtonText();
     fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch); 
@@ -436,11 +439,11 @@ function setupGlobalEventListeners() {
         });
     }
 
-    const navSetupBtn = document.getElementById('nav-setup-btn');
-    if (navSetupBtn) {
-        navSetupBtn.addEventListener('click', async () => {
+    const navSettingsBtn = document.getElementById('nav-settings-btn');
+    if (navSettingsBtn) {
+        navSettingsBtn.addEventListener('click', async () => {
             uiManager.showSection('setup-section');
-            state.setActiveView('setup');
+            state.setActiveView('settings');
             uiManager.updateNavButtonStyles();
             feedHandler.loadUserFeeds();
         });
@@ -477,6 +480,29 @@ function setupGlobalEventListeners() {
             if (event.key === 'Enter') { event.preventDefault(); keywordSearchBtn.click(); }
         });
     } else { console.warn("MainScript: Keyword search elements not found."); }
+
+    const feedFilterSelect = document.getElementById('feed-filter-select');
+    if (feedFilterSelect) {
+        feedFilterSelect.addEventListener('change', () => {
+            const selectedOptions = Array.from(feedFilterSelect.selectedOptions);
+            const selectedIds = selectedOptions
+                .map(opt => opt.value ? parseInt(opt.value) : null)
+                .filter(id => id !== null);
+            
+            state.setActiveFeedFilterIds(selectedIds);
+            state.setActiveTagFilterIds([]);
+            state.setCurrentKeywordSearch(null);
+            state.setActiveView('main');
+            const keywordInput = document.getElementById('keyword-search-input');
+            if(keywordInput) keywordInput.value = '';
+            uiManager.updateFeedFilterDropdownSelection();
+            uiManager.updateFeedFilterButtonStyles();
+            uiManager.updateNavButtonStyles();
+            uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter);
+            state.setCurrentPage(1);
+            fetchAndDisplaySummaries(false, 1, null);
+        });
+    }
 
     refreshNewsBtn = document.getElementById('refresh-news-btn');
     if (refreshNewsBtn) {
@@ -575,8 +601,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     configManager.initializeDOMReferences();
     chatHandler.initializeChatDOMReferences();
     feedHandler.initializeFeedHandlerDOMReferences(() => {
-        // This callback allows feedHandler to trigger UI updates for feed filter buttons
-        uiManager.renderFeedFilterButtons(handleFeedFilterClick, handleAllFeedsClick);
+        uiManager.populateFeedFilterDropdown();
     });
 
     // Then setup event listeners for modules that depend on these DOM elements
@@ -761,7 +786,7 @@ function initializeAllDOMReferences() {
     configManager.initializeDOMReferences();
     chatHandler.initializeChatDOMReferences();
     feedHandler.initializeFeedHandlerDOMReferences(() => {
-        uiManager.renderFeedFilterButtons(handleFeedFilterClick, handleAllFeedsClick);
+        uiManager.populateFeedFilterDropdown();
     });
     uiManager.setupUIManagerEventListeners(handleRegenerateModalUseDefaultPrompt);
     configManager.setupFormEventListeners({

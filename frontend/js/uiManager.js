@@ -12,7 +12,7 @@ import * as chatHandler from './chatHandler.js';
 // --- DOM Element References ---
 let resultsContainer, loadingIndicator, loadingText, infiniteScrollLoadingIndicator,
     feedFilterControls, activeTagFiltersDisplay,
-    mainFeedSection, setupSection, navMainBtn, navFavoritesBtn, navSetupBtn,
+    mainFeedSection, setupSection, navMainBtn, navFavoritesBtn, navDeletedBtn, navSettingsBtn,
     regenerateSummaryModal, closeRegenerateModalBtn, modalArticleIdInput, modalSummaryPromptInput, modalUseDefaultPromptBtn,
     fullArticleModal, closeFullArticleModalBtn, fullArticleModalTitle, fullArticleModalBody, fullArticleModalOriginalLink;
 
@@ -83,7 +83,8 @@ export function initializeUIDOMReferences() {
     setupSection = document.getElementById('setup-section');
     navMainBtn = document.getElementById('nav-main-btn');
     navFavoritesBtn = document.getElementById('nav-favorites-btn');
-    navSetupBtn = document.getElementById('nav-setup-btn');
+    navDeletedBtn = document.getElementById('nav-deleted-btn');
+    navSettingsBtn = document.getElementById('nav-settings-btn');
 
     regenerateSummaryModal = document.getElementById('regenerate-summary-modal');
     closeRegenerateModalBtn = document.getElementById('close-regenerate-modal-btn');
@@ -469,30 +470,74 @@ export function updateFeedFilterButtonStyles() {
     });
 }
 
+let feedFilterSelect = null;
+
+export function initializeFeedFilterDropdown() {
+    feedFilterSelect = document.getElementById('feed-filter-select');
+    return feedFilterSelect;
+}
+
+export function populateFeedFilterDropdown() {
+    if (!feedFilterSelect) {
+        feedFilterSelect = initializeFeedFilterDropdown();
+    }
+    if (!feedFilterSelect) return;
+
+    feedFilterSelect.innerHTML = '<option value="">Filter by feeds...</option>';
+    
+    state.dbFeedSources.forEach(feed => {
+        const option = document.createElement('option');
+        option.value = feed.id.toString();
+        let displayName = feed.name || (feed.url ? feed.url.split('/')[2]?.replace(/^www\./, '') : 'Unknown Feed');
+        if (displayName.length > 40) displayName = displayName.substring(0, 37) + "...";
+        option.textContent = displayName;
+        option.title = feed.url;
+        feedFilterSelect.appendChild(option);
+    });
+}
+
+export function updateFeedFilterDropdownSelection() {
+    if (!feedFilterSelect) return;
+    
+    const options = feedFilterSelect.querySelectorAll('option');
+    options.forEach(option => {
+        const feedId = option.value ? parseInt(option.value) : null;
+        if (feedId && state.activeFeedFilterIds.includes(feedId)) {
+            option.selected = true;
+        } else {
+            option.selected = false;
+        }
+    });
+}
+
 /**
- * Updates the visual style of the main navigation buttons (Main, Favorites, Setup).
+ * Updates the visual style of the main navigation buttons (Main, Favorites, Deleted, Settings).
  */
 export function updateNavButtonStyles() {
-    if (!navMainBtn || !navFavoritesBtn || !navSetupBtn) return;
+    const buttons = [navMainBtn, navFavoritesBtn, navDeletedBtn, navSettingsBtn];
+    
+    buttons.forEach(btn => {
+        if (btn) btn.classList.remove('active');
+    });
 
-    navMainBtn.classList.remove('active');
-    navFavoritesBtn.classList.remove('active');
-    navSetupBtn.classList.remove('active');
-
-    // Logic to decide which button to activate
     const currentVisibleSection = document.querySelector('.content-section.active');
     if (currentVisibleSection) {
         if (currentVisibleSection.id === 'setup-section') {
-            navSetupBtn.classList.add('active');
-            return; // Exit if on setup page
+            if (navSettingsBtn) navSettingsBtn.classList.add('active');
+            return;
+        }
+        if (currentVisibleSection.id === 'admin-section') {
+            if (navSettingsBtn) navSettingsBtn.classList.add('active');
+            return;
         }
     }
 
-    // If not on setup, decide between main and favorites
     if (state.activeView === 'favorites') {
-        navFavoritesBtn.classList.add('active');
+        if (navFavoritesBtn) navFavoritesBtn.classList.add('active');
+    } else if (state.activeView === 'deleted') {
+        if (navDeletedBtn) navDeletedBtn.classList.add('active');
     } else {
-        navMainBtn.classList.add('active');
+        if (navMainBtn) navMainBtn.classList.add('active');
     }
 }
 

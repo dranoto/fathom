@@ -1,20 +1,121 @@
 /* static_frontend/css/header.css */
 
-header {
-    background: #2c3e50; 
-    color: #ecf0f1; 
-    padding: 25px 0; 
-    text-align: center;
-    border-bottom: 4px solid #1abc9c; 
+.site-header {
+    background: #2c3e50;
+    color: #ecf0f1;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 4px solid #1abc9c;
 }
 
-header h1 { /* Already has base styles from base.css */
-    margin-top: 0; /* Ensure no top margin if not already reset */
-    margin-bottom: 0; /* Ensure no bottom margin if not already reset */
+.header-left {
+    flex: 0 0 auto;
 }
 
-header .tagline {
-    margin-top: 8px;
-    font-size: 1.1em;
-    color: #bdc3c7; 
+.logo {
+    margin: 0;
+    font-size: 1.5em;
+    color: #ecf0f1;
+}
+
+.header-center {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+}
+
+.view-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.view-btn {
+    background: transparent;
+    border: 1px solid #5d6d7e;
+    color: #bdc3c7;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.95em;
+    transition: all 0.2s;
+}
+
+.view-btn:hover {
+    background: #34495e;
+    border-color: #7f8c8d;
+}
+
+.view-btn.active {
+    background: #1abc9c;
+    border-color: #1abc9c;
+    color: #ffffff;
+}
+
+.feed-filter-dropdown {
+    position: relative;
+}
+
+#feed-filter-select {
+    padding: 8px 12px;
+    border-radius: 5px;
+    border: 1px solid #5d6d7e;
+    background: #34495e;
+    color: #ecf0f1;
+    font-size: 0.95em;
+    min-width: 200px;
+    max-width: 300px;
+}
+
+#feed-filter-select:focus {
+    outline: none;
+    border-color: #1abc9c;
+}
+
+#feed-filter-select option {
+    padding: 5px;
+}
+
+#feed-filter-controls {
+    display: none;
+}
+
+.header-right {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.user-menu {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#user-email {
+    color: #bdc3c7;
+    font-size: 0.9em;
+}
+
+.icon-btn {
+    background: transparent;
+    border: none;
+    font-size: 1.2em;
+    cursor: pointer;
+    padding: 5px 8px;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.icon-btn:hover {
+    background: #34495e;
+}
+
+.auth-buttons {
+    display: flex;
+    gap: 10px;
 }

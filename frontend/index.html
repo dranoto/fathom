@@ -26,44 +26,35 @@
 </head>
 <body>
     <div class="page-container">
-        <header>
-            <div class="container">
-                <h1>Fathom</h1>
-                <p class="tagline">Penetrate the depths of knowledge</p>
+        <header class="site-header">
+            <div class="header-left">
+                <h1 class="logo">Fathom</h1>
             </div>
-        </header>
-
-        <nav class="main-nav container">
-            <div class="nav-left">
-                <button id="nav-main-btn" class="nav-button active">Main Feed</button>
-                <button id="nav-favorites-btn" class="nav-button">Favorites</button>
-                <button id="nav-deleted-btn" class="nav-button">Deleted</button>
-                <button id="nav-setup-btn" class="nav-button">Setup</button>
-                <button id="nav-admin-btn" class="nav-button" style="display: none;">Admin</button>
-                <button id="refresh-news-btn" class="nav-button refresh-button">Manually Refresh Feeds</button>
+            <div class="header-center">
+                <div class="view-buttons">
+                    <button id="nav-main-btn" class="view-btn active">All Feeds</button>
+                    <button id="nav-favorites-btn" class="view-btn">Favorites</button>
+                    <button id="nav-deleted-btn" class="view-btn">Deleted</button>
+                </div>
+                <div class="feed-filter-dropdown">
+                    <select id="feed-filter-select" multiple>
+                        <option value="">Filter by feeds...</option>
+                    </select>
+                </div>
             </div>
-            <div class="nav-right">
-                <div id="auth-buttons" class="auth-buttons">
+            <div class="header-right">
+                <div id="auth-buttons" class="auth-buttons" style="display: none;">
                     <button id="nav-login-btn" class="nav-button">Login</button>
                     <button id="nav-register-btn" class="nav-button">Register</button>
                 </div>
                 <div id="user-menu" class="user-menu" style="display: none;">
                     <span id="user-email"></span>
-                    <button id="logout-btn" class="nav-button">Logout</button>
-                    <button id="delete-account-btn" class="nav-button action-button">Delete Account</button>
+                    <button id="nav-settings-btn" class="icon-btn" title="Settings">⚙️</button>
+                    <button id="nav-admin-btn" class="icon-btn" title="Admin Panel" style="display: none;">🔧</button>
+                    <button id="logout-btn" class="icon-btn" title="Logout">↩</button>
                 </div>
             </div>
-        </nav>
-
-        <div class="search-container container">
-            <input type="search" id="keyword-search-input" placeholder="Search articles by keyword...">
-            <button id="keyword-search-btn" class="nav-button">Search</button>
-        </div>
-
-        <div id="feed-filter-controls" class="container feed-filters">
-            </div>
-        <div id="active-tag-filters-display" class="container tag-filters-display" style="display: none; margin-bottom: 15px;">
-            </div>
+        </header>
 
 
         <main class="container">
@@ -82,7 +73,7 @@
             </section>
 
             <section id="setup-section" class="content-section">
-                <h2>Setup & Preferences</h2>
+                <h2>Settings</h2>
                 <div class="setup-block">
                     <h3>Content Preferences</h3>
                     <form id="content-prefs-form">
@@ -145,6 +136,12 @@
                     <p><strong>Summary:</strong></p><pre id="current-summary-prompt-display" class="prompt-preview"></pre>
                     <p><strong>Tag Gen:</strong></p><pre id="current-tag-generation-prompt-display" class="prompt-preview"></pre>
                     <p><strong>Chat:</strong></p><pre id="current-chat-prompt-display" class="prompt-preview"></pre>
+                </div>
+
+                <div class="setup-block">
+                    <h3>Account</h3>
+                    <button type="button" id="delete-account-btn" class="nav-button action-button clear-all">Delete Account</button>
+                    <p style="font-size: 0.85em; color: #7f8c8d; margin-top: 5px;">Warning: This will permanently delete your account and all your data.</p>
                 </div>
             </section>
 
