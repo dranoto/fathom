@@ -80,6 +80,7 @@ async def get_news_summaries_endpoint(
     db_query = db.query(database.Article).filter(database.Article.feed_source_id.in_(feed_source_id_set))
     search_source_display_parts = []
     
+    tagged_article_ids = None
     if query.tag_ids:
         db_query = db_query.join(
             database.article_tag_association,
@@ -88,6 +89,15 @@ async def get_news_summaries_endpoint(
             database.article_tag_association.c.user_id == current_user.id,
             database.article_tag_association.c.tag_id.in_(query.tag_ids)
         )
+        tagged_article_ids_result = db.query(database.Article.id).filter(
+            database.Article.feed_source_id.in_(feed_source_id_set),
+            database.article_tag_association.c.user_id == current_user.id,
+            database.article_tag_association.c.tag_id.in_(query.tag_ids)
+        ).join(
+            database.article_tag_association,
+            database.Article.id == database.article_tag_association.c.article_id
+        ).all()
+        tagged_article_ids = {a[0] for a in tagged_article_ids_result}
         tag_names_result = db.query(database.Tag.name).join(
             database.article_tag_association,
             database.Tag.id == database.article_tag_association.c.tag_id
@@ -133,6 +143,8 @@ async def get_news_summaries_endpoint(
     
     if query.favorites_only:
         articles_to_filter = user_favorite_ids
+    elif tagged_article_ids is not None:
+        articles_to_filter = tagged_article_ids
     else:
         effective_feed_ids = feed_source_id_set
         if query.feed_source_ids:
