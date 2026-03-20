@@ -765,25 +765,25 @@ async def get_deleted_articles(
     db: SQLAlchemySession = Depends(database.get_db)
 ):
     """Get all deleted articles for the current user."""
-    feed_source_ids = db.query(database.UserFeedSubscription.feed_source_id).filter(
-        database.UserFeedSubscription.user_id == current_user.id
-    ).all()
-    feed_source_id_set = {f[0] for f in feed_source_ids}
-    
-    if not feed_source_id_set:
-        return []
-    
-    deleted_states = db.query(database.UserArticleState).filter(
-        database.UserArticleState.user_id == current_user.id,
-        database.UserArticleState.is_deleted == True
-    ).all()
-    
-    deleted_article_ids = [s.article_id for s in deleted_states]
-    
-    if not deleted_article_ids:
-        return []
-    
     try:
+        feed_source_ids = db.query(database.UserFeedSubscription.feed_source_id).filter(
+            database.UserFeedSubscription.user_id == current_user.id
+        ).all()
+        feed_source_id_set = {f[0] for f in feed_source_ids if f[0] is not None}
+        
+        if not feed_source_id_set:
+            return []
+        
+        deleted_states = db.query(database.UserArticleState).filter(
+            database.UserArticleState.user_id == current_user.id,
+            database.UserArticleState.is_deleted == True
+        ).all()
+        
+        deleted_article_ids = [s.article_id for s in deleted_states if s.article_id is not None]
+        
+        if not deleted_article_ids:
+            return []
+        
         articles = db.query(database.Article).filter(
             database.Article.id.in_(deleted_article_ids),
             database.Article.feed_source_id.in_(feed_source_id_set)
@@ -809,4 +809,4 @@ async def get_deleted_articles(
         return results
     except Exception as e:
         logger.error(f"Error fetching deleted articles: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Error fetching deleted articles")
+        raise HTTPException(status_code=500, detail=f"Error fetching deleted articles: {str(e)}")
