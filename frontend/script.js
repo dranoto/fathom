@@ -446,6 +446,16 @@ function setupGlobalEventListeners() {
         });
     }
 
+    const navAdminBtn = document.getElementById('nav-admin-btn');
+    if (navAdminBtn) {
+        navAdminBtn.addEventListener('click', async () => {
+            uiManager.showSection('admin-section');
+            state.setActiveView('admin');
+            uiManager.updateNavButtonStyles();
+            adminLoadUsers();
+        });
+    }
+
     // DOM elements like keywordSearchInput are now initialized at the top of this file or within this function.
     keywordSearchInput = document.getElementById('keyword-search-input'); 
     keywordSearchBtn = document.getElementById('keyword-search-btn');
@@ -654,14 +664,17 @@ function formatTimeAgo(dateStr) {
 function updateAuthUI() {
     const loggedIn = apiService.isLoggedIn();
     const userData = apiService.getUserData();
+    const navAdminBtn = document.getElementById('nav-admin-btn');
     
     if (loggedIn && userData) {
         if (authButtons) authButtons.style.display = 'none';
         if (userMenu) userMenu.style.display = 'flex';
         if (userEmail) userEmail.textContent = userData.email;
+        if (navAdminBtn) navAdminBtn.style.display = userData.is_admin ? 'inline-block' : 'none';
     } else {
         if (authButtons) authButtons.style.display = 'flex';
         if (userMenu) userMenu.style.display = 'none';
+        if (navAdminBtn) navAdminBtn.style.display = 'none';
     }
 }
 
@@ -831,3 +844,318 @@ function setupAuthEventListeners() {
     
     updateAuthUI();
 }
+
+// Admin Panel Functions
+window.adminShowTab = function(tabName) {
+    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById('admin' + tabName.charAt(0).toUpperCase() + tabName.slice(1) + 'Tab').style.display = 'block';
+    event.target.classList.add('active');
+    
+    if (tabName === 'users') {
+        adminLoadUsers();
+    } else if (tabName === 'feeds') {
+        adminLoadFeeds();
+    } else if (tabName === 'settings') {
+        adminLoadSettings();
+    }
+};
+
+function adminShowAlert(message, type = 'success') {
+    const container = document.getElementById('admin-alert-container');
+    container.innerHTML = `<div class="alert alert-${type}" style="padding: 15px; border-radius: 5px; margin-bottom: 15px; background: ${type === 'success' ? '#d4edda' : '#f8d7da'}; color: ${type === 'success' ? '#155724' : '#721c24'}; border: 1px solid ${type === 'success' ? '#c3e6cb' : '#f5c6cb'};">${message}</div>`;
+    setTimeout(() => container.innerHTML = '', 5000);
+}
+
+async function adminLoadUsers() {
+    try {
+        const users = await apiService.getAdminUsers();
+        const container = document.getElementById('admin-users-list');
+        
+        if (users.length === 0) {
+            container.innerHTML = '<p style="padding: 20px;">No users found.</p>';
+            return;
+        }
+        
+        container.innerHTML = `
+            <table>
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Admin</th>
+                        <th>Created</th>
+                        <th>Feeds</th>
+                        <th>Article States</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${users.map(u => `
+                        <tr>
+                            <td>${u.email}</td>
+                            <td>${u.is_admin ? 'Yes' : 'No'}</td>
+                            <td>${u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}</td>
+                            <td>${u.feed_count}</td>
+                            <td>${u.article_state_count}</td>
+                            <td>
+                                ${u.is_admin ? '<em>Cannot delete</em>' : 
+                                    `<button class="nav-button" style="padding: 6px 12px; background: #e74c3c; border-color: #e74c3c; color: white;" onclick="adminDeleteUser(${u.id}, '${u.email.replace(/'/g, "\\'")}')">Delete</button>`}
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    } catch (error) {
+        document.getElementById('admin-users-list').innerHTML = 
+            `<p style="color: #e74c3c; padding: 20px;">Error loading users: ${error.message}</p>`;
+    }
+}
+
+window.adminDeleteUser = async function(userId, email) {
+    if (!confirm(`Delete user "${email}"? This will delete all their data.`)) {
+        return;
+    }
+    try {
+        await apiService.deleteAdminUser(userId);
+        adminShowAlert(`User ${email} deleted`);
+        adminLoadUsers();
+    } catch (error) {
+        adminShowAlert('Error deleting user: ' + error.message, 'error');
+    }
+};
+
+async function adminLoadFeeds() {
+    try {
+        const feeds = await apiService.getAdminFeeds();
+        document.getElementById('admin-total-feeds').textContent = feeds.length;
+        document.getElementById('admin-total-articles').textContent = 
+            feeds.reduce((sum, f) => sum + f.article_count, 0);
+        
+        const container = document.getElementById('admin-feeds-list');
+        
+        if (feeds.length === 0) {
+            container.innerHTML = '<p style="padding: 20px;">No feeds found.</p>';
+            return;
+        }
+        
+        container.innerHTML = `
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>URL</th>
+                        <th>Users</th>
+                        <th>Articles</th>
+                        <th>Interval</th>
+                        <th>Last Fetch</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${feeds.map(f => `
+                        <tr>
+                            <td>${f.name}</td>
+                            <td><code style="font-size: 0.85em;">${f.url}</code></td>
+                            <td>${f.user_count}</td>
+                            <td>${f.article_count}</td>
+                            <td>${f.fetch_interval_minutes}m</td>
+                            <td>${f.last_fetch_at ? new Date(f.last_fetch_at).toLocaleString() : 'Never'}</td>
+                            <td>
+                                <button class="nav-button" style="padding: 6px 12px;" onclick="adminOpenEditModal(${f.id}, '${f.name.replace(/'/g, "\\'")}', '${f.url}', ${f.fetch_interval_minutes})">Edit</button>
+                                ${f.user_count > 0 ? 
+                                    `<em style="color: #7f8c8d;">Has users</em>` : 
+                                    `<button class="nav-button" style="padding: 6px 12px; background: #e74c3c; border-color: #e74c3c; color: white;" onclick="adminDeleteFeed(${f.id}, '${f.name.replace(/'/g, "\\'")}')">Delete</button>`}
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    } catch (error) {
+        document.getElementById('admin-feeds-list').innerHTML = 
+            `<p style="color: #e74c3c; padding: 20px;">Error loading feeds: ${error.message}</p>`;
+    }
+}
+
+window.adminAddFeed = async function(event) {
+    event.preventDefault();
+    const url = document.getElementById('admin-feed-url').value;
+    const name = document.getElementById('admin-feed-name').value || null;
+    const interval = parseInt(document.getElementById('admin-feed-interval').value) || 60;
+    
+    try {
+        await apiService.addAdminFeed({ url, name, fetch_interval_minutes: interval });
+        adminShowAlert('Feed added successfully');
+        document.getElementById('admin-add-feed-form').reset();
+        document.getElementById('admin-feed-interval').value = 60;
+        adminLoadFeeds();
+    } catch (error) {
+        adminShowAlert('Error adding feed: ' + error.message, 'error');
+    }
+};
+
+window.adminDeleteFeed = async function(feedId, feedName) {
+    if (!confirm(`Delete feed "${feedName}"? All articles will be deleted.`)) {
+        return;
+    }
+    try {
+        await apiService.deleteAdminFeed(feedId);
+        adminShowAlert(`Feed ${feedName} deleted`);
+        adminLoadFeeds();
+    } catch (error) {
+        adminShowAlert('Error deleting feed: ' + error.message, 'error');
+    }
+};
+
+window.adminOpenEditModal = function(feedId, name, url, interval) {
+    document.getElementById('admin-edit-feed-id').value = feedId;
+    document.getElementById('admin-edit-feed-name').value = name;
+    document.getElementById('admin-edit-feed-url').value = url;
+    document.getElementById('admin-edit-feed-interval').value = interval;
+    document.getElementById('admin-edit-feed-modal').style.display = 'flex';
+};
+
+window.adminCloseEditModal = function() {
+    document.getElementById('admin-edit-feed-modal').style.display = 'none';
+};
+
+window.adminSaveEditedFeed = async function(event) {
+    event.preventDefault();
+    const feedId = document.getElementById('admin-edit-feed-id').value;
+    const name = document.getElementById('admin-edit-feed-name').value;
+    const interval = parseInt(document.getElementById('admin-edit-feed-interval').value);
+    
+    try {
+        await apiService.updateAdminFeed(feedId, { name, fetch_interval_minutes: interval });
+        adminShowAlert('Feed updated successfully');
+        adminCloseEditModal();
+        adminLoadFeeds();
+    } catch (error) {
+        adminShowAlert('Error updating feed: ' + error.message, 'error');
+    }
+};
+
+async function adminLoadSettings() {
+    try {
+        const settings = await apiService.getAdminSettings();
+        const container = document.getElementById('admin-settings-form');
+        
+        container.innerHTML = `
+            <div class="settings-grid">
+                <div class="settings-section">
+                    <h3>Models</h3>
+                    <div class="model-row">
+                        <label style="width: 120px;">Summary:</label>
+                        <input type="text" id="admin-summary-model" value="${settings.summary_model || ''}">
+                        <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="adminUpdateSetting('summary_model', document.getElementById('admin-summary-model').value)">Update</button>
+                    </div>
+                    <div class="model-row">
+                        <label style="width: 120px;">Chat:</label>
+                        <input type="text" id="admin-chat-model" value="${settings.chat_model || ''}">
+                        <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="adminUpdateSetting('chat_model', document.getElementById('admin-chat-model').value)">Update</button>
+                    </div>
+                    <div class="model-row">
+                        <label style="width: 120px;">Tag:</label>
+                        <input type="text" id="admin-tag-model" value="${settings.tag_model || ''}">
+                        <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="adminUpdateSetting('tag_model', document.getElementById('admin-tag-model').value)">Update</button>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h3>Max Output Tokens</h3>
+                    <div class="model-row">
+                        <label style="width: 120px;">Summary:</label>
+                        <input type="number" id="admin-summary-tokens" value="${settings.summary_max_output_tokens || '1024'}">
+                        <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="adminUpdateSetting('summary_max_output_tokens', document.getElementById('admin-summary-tokens').value)">Update</button>
+                    </div>
+                    <div class="model-row">
+                        <label style="width: 120px;">Chat:</label>
+                        <input type="number" id="admin-chat-tokens" value="${settings.chat_max_output_tokens || '4096'}">
+                        <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="adminUpdateSetting('chat_max_output_tokens', document.getElementById('admin-chat-tokens').value)">Update</button>
+                    </div>
+                    <div class="model-row">
+                        <label style="width: 120px;">Tag:</label>
+                        <input type="number" id="admin-tag-tokens" value="${settings.tag_max_output_tokens || '100'}">
+                        <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="adminUpdateSetting('tag_max_output_tokens', document.getElementById('admin-tag-tokens').value)">Update</button>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h3>System Settings</h3>
+                    <div class="model-row">
+                        <label style="width: 180px;">Min Word Count:</label>
+                        <input type="number" id="admin-min-word-count" value="${settings.minimum_word_count || '100'}" min="0" max="1000" style="width: 80px;">
+                        <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="adminUpdateSetting('minimum_word_count', document.getElementById('admin-min-word-count').value)">Update</button>
+                    </div>
+                    <p style="font-size: 0.85em; color: #7f8c8d; margin-top: 5px;">Articles with fewer words will be hidden from feeds.</p>
+                    <div class="model-row" style="margin-top: 15px;">
+                        <label style="width: 180px;">RSS Interval (min):</label>
+                        <input type="number" id="admin-rss-interval" value="${settings.default_rss_fetch_interval_minutes || '60'}" min="5" max="1440" style="width: 80px;">
+                        <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="adminUpdateSetting('default_rss_fetch_interval_minutes', document.getElementById('admin-rss-interval').value)">Update</button>
+                    </div>
+                </div>
+            </div>
+            <div class="settings-section" style="margin-top: 25px;">
+                <h3>Default Prompts</h3>
+                <div class="form-group">
+                    <label>Summary Prompt</label>
+                    <textarea id="admin-summary-prompt" rows="3">${(settings.summary_prompt || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+                    <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c; margin-top: 8px;" onclick="adminUpdateSetting('summary_prompt', document.getElementById('admin-summary-prompt').value)">Update</button>
+                </div>
+                <div class="form-group">
+                    <label>Chat Prompt</label>
+                    <textarea id="admin-chat-prompt" rows="3">${(settings.chat_prompt || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+                    <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c; margin-top: 8px;" onclick="adminUpdateSetting('chat_prompt', document.getElementById('admin-chat-prompt').value)">Update</button>
+                </div>
+                <div class="form-group">
+                    <label>Tag Generation Prompt</label>
+                    <textarea id="admin-tag-prompt" rows="3">${(settings.tag_prompt || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+                    <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c; margin-top: 8px;" onclick="adminUpdateSetting('tag_prompt', document.getElementById('admin-tag-prompt').value)">Update</button>
+                </div>
+            </div>
+            <div class="settings-section" style="margin-top: 25px;">
+                <h3>Data Management</h3>
+                <div class="form-group">
+                    <label for="admin-days-old-input">Delete articles older than (days):</label>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="number" id="admin-days-old-input" value="30" min="1" max="3650" style="width: 100px;">
+                        <button class="nav-button" style="background: #e74c3c; border-color: #e74c3c; color: white;" onclick="adminDeleteOldData()">Delete Old Articles</button>
+                    </div>
+                    <p id="admin-delete-status" style="margin-top: 10px; font-size: 0.9em;"></p>
+                </div>
+            </div>
+        `;
+    } catch (error) {
+        document.getElementById('admin-settings-form').innerHTML = 
+            `<p style="color: #e74c3c; padding: 20px;">Error loading settings: ${error.message}</p>`;
+    }
+}
+
+window.adminUpdateSetting = async function(key, value) {
+    try {
+        await apiService.updateAdminSettings({ [key]: value });
+        adminShowAlert('Setting updated');
+    } catch (error) {
+        adminShowAlert('Error updating setting: ' + error.message, 'error');
+    }
+};
+
+window.adminDeleteOldData = async function() {
+    const days = parseInt(document.getElementById('admin-days-old-input').value);
+    const statusEl = document.getElementById('admin-delete-status');
+    if (isNaN(days) || days < 1) {
+        statusEl.textContent = 'Please enter a valid number of days.';
+        statusEl.style.color = '#e74c3c';
+        return;
+    }
+    if (!confirm(`Delete all articles older than ${days} days? This cannot be undone.`)) return;
+    statusEl.textContent = 'Deleting...';
+    statusEl.style.color = 'inherit';
+    try {
+        const result = await apiService.deleteOldData(days);
+        statusEl.textContent = result.message || 'Done';
+        statusEl.style.color = '#27ae60';
+    } catch (error) {
+        statusEl.textContent = 'Error: ' + error.message;
+        statusEl.style.color = '#e74c3c';
+    }
+};

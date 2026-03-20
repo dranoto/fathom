@@ -39,6 +39,7 @@
                 <button id="nav-favorites-btn" class="nav-button">Favorites</button>
                 <button id="nav-deleted-btn" class="nav-button">Deleted</button>
                 <button id="nav-setup-btn" class="nav-button">Setup</button>
+                <button id="nav-admin-btn" class="nav-button" style="display: none;">Admin</button>
                 <button id="refresh-news-btn" class="nav-button refresh-button">Manually Refresh Feeds</button>
             </div>
             <div class="nav-right">
@@ -152,6 +153,69 @@
                 <p>Articles are automatically purged after 30 days.</p>
                 <div id="deleted-articles-list"></div>
             </section>
+
+            <section id="admin-section" class="content-section">
+                <h2>Admin Panel</h2>
+                <div id="admin-alert-container"></div>
+
+                <div class="tab-buttons">
+                    <button class="tab-btn active" onclick="adminShowTab('users')">Users</button>
+                    <button class="tab-btn" onclick="adminShowTab('feeds')">Feeds</button>
+                    <button class="tab-btn" onclick="adminShowTab('settings')">Settings</button>
+                </div>
+
+                <div id="adminUsersTab" class="tab-content">
+                    <div id="admin-users-list">
+                        <div class="loading">Loading users...</div>
+                    </div>
+                </div>
+
+                <div id="adminFeedsTab" class="tab-content" style="display: none;">
+                    <div class="stat-cards">
+                        <div class="stat-card">
+                            <h4>Total Feeds</h4>
+                            <div class="value" id="admin-total-feeds">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <h4>Total Articles</h4>
+                            <div class="value" id="admin-total-articles">0</div>
+                        </div>
+                    </div>
+
+                    <div class="add-feed-section content-section">
+                        <h3 style="margin-top: 0;">Add New Feed</h3>
+                        <form id="admin-add-feed-form" onsubmit="adminAddFeed(event)">
+                            <div class="inline-form">
+                                <div class="form-group">
+                                    <label for="admin-feed-url">Feed URL *</label>
+                                    <input type="url" id="admin-feed-url" required placeholder="https://example.com/feed.xml">
+                                </div>
+                                <div class="form-group">
+                                    <label for="admin-feed-name">Name (optional)</label>
+                                    <input type="text" id="admin-feed-name" placeholder="My Feed">
+                                </div>
+                                <div class="form-group">
+                                    <label for="admin-feed-interval">Interval (minutes)</label>
+                                    <input type="number" id="admin-feed-interval" value="60" min="5">
+                                </div>
+                                <div class="form-group" style="align-self: flex-end;">
+                                    <button type="submit" class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;">Add Feed</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div id="admin-feeds-list">
+                        <div class="loading">Loading feeds...</div>
+                    </div>
+                </div>
+
+                <div id="adminSettingsTab" class="tab-content" style="display: none;">
+                    <div id="admin-settings-form">
+                        <div class="loading">Loading settings...</div>
+                    </div>
+                </div>
+            </section>
         </main>
         <footer>
             <div class="container">
@@ -259,6 +323,32 @@
             <div class="full-article-modal-footer">
                 <a href="#" id="full-article-modal-original-link" class="button-like-link" target="_blank" rel="noopener noreferrer">View Original on Publisher's Site</a>
             </div>
+        </div>
+    </div>
+
+    <div id="admin-edit-feed-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-button" onclick="adminCloseEditModal()">&times;</span>
+            <h3>Edit Feed</h3>
+            <form id="admin-edit-feed-form" onsubmit="adminSaveEditedFeed(event)">
+                <input type="hidden" id="admin-edit-feed-id">
+                <div class="form-group">
+                    <label for="admin-edit-feed-name">Name</label>
+                    <input type="text" id="admin-edit-feed-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="admin-edit-feed-url">URL</label>
+                    <input type="url" id="admin-edit-feed-url" readonly style="background: #ecf0f1;">
+                </div>
+                <div class="form-group">
+                    <label for="admin-edit-feed-interval">Fetch Interval (minutes)</label>
+                    <input type="number" id="admin-edit-feed-interval" min="5" required>
+                </div>
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                    <button type="button" class="nav-button" onclick="adminCloseEditModal()">Cancel</button>
+                    <button type="submit" class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;">Save Changes</button>
+                </div>
+            </form>
         </div>
     </div>
 
