@@ -11,7 +11,7 @@ import * as chatHandler from './chatHandler.js';
 
 // --- DOM Element References ---
 let resultsContainer, loadingIndicator, loadingText, infiniteScrollLoadingIndicator,
-    feedFilterControls, activeTagFiltersDisplay,
+    activeTagFiltersDisplay,
     mainFeedSection, setupSection, navMainBtn, navFavoritesBtn, navDeletedBtn, navSettingsBtn,
     regenerateSummaryModal, closeRegenerateModalBtn, modalArticleIdInput, modalSummaryPromptInput, modalUseDefaultPromptBtn,
     fullArticleModal, closeFullArticleModalBtn, fullArticleModalTitle, fullArticleModalBody, fullArticleModalOriginalLink;
@@ -77,7 +77,6 @@ export function initializeUIDOMReferences() {
     loadingIndicator = document.getElementById('loading-indicator');
     loadingText = document.getElementById('loading-text');
     infiniteScrollLoadingIndicator = document.getElementById('infinite-scroll-loading-indicator');
-    feedFilterControls = document.getElementById('feed-filter-controls');
     activeTagFiltersDisplay = document.getElementById('active-tag-filters-display');
     mainFeedSection = document.getElementById('main-feed-section');
     setupSection = document.getElementById('setup-section');
@@ -427,49 +426,6 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
     });
 }
 
-/**
- * Renders the feed filter buttons.
- */
-export function renderFeedFilterButtons(onFeedFilterClick, onAllFeedsClick) {
-    if (!feedFilterControls) {
-        console.warn("UIManager: feedFilterControls element not found.");
-        return;
-    }
-    feedFilterControls.innerHTML = '';
-    const allFeedsButton = document.createElement('button');
-    allFeedsButton.textContent = 'All Feeds';
-    allFeedsButton.onclick = onAllFeedsClick;
-    feedFilterControls.appendChild(allFeedsButton);
-    state.dbFeedSources.forEach(feed => {
-        const feedButton = document.createElement('button');
-        let displayName = feed.name || (feed.url ? feed.url.split('/')[2]?.replace(/^www\./, '') : 'Unknown Feed');
-        if (displayName.length > 30) displayName = displayName.substring(0, 27) + "..."; 
-        feedButton.textContent = displayName;
-        feedButton.title = `${feed.name || 'Unnamed Feed'} (${feed.url})`; 
-        feedButton.setAttribute('data-feedid', feed.id.toString());
-        feedButton.onclick = () => onFeedFilterClick(feed.id);
-        feedFilterControls.appendChild(feedButton);
-    });
-    updateFeedFilterButtonStyles();
-}
-
-/**
- * Updates the visual style of feed filter buttons.
- */
-export function updateFeedFilterButtonStyles() {
-    if (!feedFilterControls) return;
-    const buttons = feedFilterControls.querySelectorAll('button');
-    buttons.forEach(button => {
-        button.classList.remove('active'); 
-        const feedIdAttr = button.getAttribute('data-feedid');
-        if (state.activeFeedFilterIds.length === 0 && button.textContent === 'All Feeds') {
-            button.classList.add('active');
-        } else if (feedIdAttr && state.activeFeedFilterIds.includes(parseInt(feedIdAttr))) {
-            button.classList.add('active');
-        }
-    });
-}
-
 let feedFilterSelect = null;
 
 export function initializeFeedFilterDropdown() {
@@ -483,12 +439,14 @@ export function populateFeedFilterDropdown() {
     }
     if (!feedFilterSelect) return;
 
-    feedFilterSelect.innerHTML = '<option value="">All Feeds</option>';
+    feedFilterSelect.innerHTML = '<option value="">Select a feed...</option>';
     
     state.dbFeedSources.forEach(feed => {
         const option = document.createElement('option');
         option.value = feed.id.toString();
-        let displayName = feed.name || (feed.url ? feed.url.split('/')[2]?.replace(/^www\./, '') : 'Unknown Feed');
+        const userFeed = state.userFeeds?.find(uf => uf.feed_source_id === feed.id);
+        const customName = userFeed?.custom_name;
+        let displayName = customName || feed.name || (feed.url ? feed.url.split('/')[2]?.replace(/^www\./, '') : 'Unknown Feed');
         if (displayName.length > 40) displayName = displayName.substring(0, 37) + "...";
         option.textContent = displayName;
         option.title = feed.url;
@@ -502,6 +460,10 @@ export function updateFeedFilterDropdownSelection() {
     }
     if (!feedFilterSelect) return;
     feedFilterSelect.value = '';
+}
+
+export function updateFeedFilterButtonStyles() {
+    // Deprecated - feed filter now uses dropdown, no button styles to update
 }
 
 /**

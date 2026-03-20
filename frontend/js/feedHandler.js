@@ -43,7 +43,7 @@ async function loadPublicFeedsDropdown() {
         publicFeeds.forEach(feed => {
             const option = document.createElement('option');
             option.value = feed.url;
-            option.textContent = `${feed.name || feed.url} (${feed.url})`;
+            option.textContent = `${feed.custom_name || feed.name || feed.url} (${feed.url})`;
             publicFeedsSelectEl.appendChild(option);
         });
         console.log("FeedHandler: Loaded", publicFeeds.length, "public feeds into dropdown");
@@ -70,8 +70,30 @@ function renderUserFeedsList() {
         
         const nameSpan = document.createElement('span');
         nameSpan.classList.add('feed-name');
-        nameSpan.textContent = feed.name || feed.url;
+        nameSpan.textContent = feed.custom_name || feed.name || feed.url;
         tag.appendChild(nameSpan);
+
+        const editBtn = document.createElement('button');
+        editBtn.classList.add('edit-feed-btn');
+        editBtn.textContent = '✎';
+        editBtn.title = 'Edit feed name';
+        editBtn.onclick = () => {
+            const currentName = feed.custom_name || feed.name || '';
+            const newName = prompt('Enter a custom name for this feed:', currentName);
+            if (newName === null) return;
+            if (newName === feed.custom_name) return;
+            (async () => {
+                try {
+                    await apiService.updateUserFeed(feed.id, { custom_name: newName || null });
+                    await loadUserFeeds();
+                    if (refreshMainFeedFilterButtonsCallback) refreshMainFeedFilterButtonsCallback();
+                } catch (error) {
+                    console.error("FeedHandler: Error updating feed:", error);
+                    alert(`Error updating feed: ${error.message}`);
+                }
+            })();
+        };
+        tag.appendChild(editBtn);
 
         const removeBtn = document.createElement('button');
         removeBtn.classList.add('remove-feed-btn');
@@ -145,7 +167,7 @@ async function handleAddNewFeed(event) {
     }
 
     try {
-        await apiService.addUserFeed({ url, name: name || null });
+        await apiService.addUserFeed({ url, custom_name: name || null });
         rssFeedUrlInput.value = '';
         if (rssFeedNameInput) rssFeedNameInput.value = '';
         await loadUserFeeds();
@@ -156,9 +178,9 @@ async function handleAddNewFeed(event) {
     }
 }
 
-export function renderFeedsFromState() {
+export async function renderFeedsFromState() {
     console.log("FeedHandler: Rendering feeds from state...");
-    loadUserFeeds();
+    await loadUserFeeds();
 }
 
 export async function fetchAndRenderDbFeeds() {

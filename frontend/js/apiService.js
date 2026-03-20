@@ -192,6 +192,14 @@ export async function deleteUserFeed(feedId) {
     });
 }
 
+export async function updateUserFeed(feedId, feedData) {
+    return handleFetch(`/api/users/feeds/${feedId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(feedData)
+    });
+}
+
 export async function triggerUserFeedFetch(feedId) {
     return handleFetch(`/api/users/feeds/${feedId}/trigger-fetch`, {
         method: 'POST'

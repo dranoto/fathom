@@ -150,3 +150,11 @@
 .clear-all-filters-btn:hover {
     background-color: #c0392b;
 }
+
+.active-tag-filters-display {
+    display: none;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-left: 10px;
+}

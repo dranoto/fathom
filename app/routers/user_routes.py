@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session as SQLAlchemySession
 from pydantic import BaseModel
 
 from .. import database
+from .. import tasks
 from .auth_routes import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ class UserFeedResponse(BaseModel):
     url: str
     name: Optional[str] = None
     custom_name: Optional[str] = None
-    subscribed_at: datetime
+    subscribed_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -137,6 +138,7 @@ async def get_user_feeds(
 @router.post("/users/feeds", response_model=UserFeedResponse, status_code=201)
 async def add_user_feed(
     request: AddFeedRequest,
+    background_tasks: BackgroundTasks,
     current_user: database.User = Depends(get_current_user),
     db: SQLAlchemySession = Depends(database.get_db)
 ):
@@ -178,13 +180,16 @@ async def add_user_feed(
     new_sub = database.UserFeedSubscription(
         user_id=current_user.id,
         feed_source_id=feed_source.id,
-        custom_name=request.custom_name
+        custom_name=request.custom_name,
+        subscribed_at=datetime.now(timezone.utc)
     )
     db.add(new_sub)
     db.commit()
-    db.refresh(new_sub)
     
     logger.info(f"API: Feed subscribed for user {current_user.id}: {request.url}")
+    
+    background_tasks.add_task(tasks.trigger_rss_update_single_feed, feed_source.id)
+    logger.info(f"API: Triggered RSS scrape for new feed {feed_source.id}")
     
     return UserFeedResponse(
         id=new_sub.id,

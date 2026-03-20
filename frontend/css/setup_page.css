@@ -185,3 +185,15 @@
 .user-feed-tag .remove-feed-btn:hover {
     background-color: rgba(255,255,255,0.4);
 }
+.user-feed-tag .edit-feed-btn {
+    background-color: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 50%;
+    font-size: 0.8em;
+}
+.user-feed-tag .edit-feed-btn:hover {
+    background-color: rgba(255,255,255,0.4);
+}

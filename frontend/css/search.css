@@ -10,6 +10,12 @@
     justify-content: center; 
 }
 
+.keyword-search-wrapper {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
 #keyword-search-input {
     flex-grow: 1; 
     max-width: 400px; 

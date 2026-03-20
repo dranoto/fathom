@@ -40,7 +40,9 @@ async function fetchAndDisplaySummaries(forceBackendRssRefresh = false, page = s
     if (state.activeFeedFilterIds.length > 0) {
         const feedNames = state.activeFeedFilterIds.map(id => {
             const feed = state.dbFeedSources.find(f => f.id === id);
-            return feed ? (feed.name || feed.url.split('/')[2]?.replace(/^www\./, '')) : `ID ${id}`;
+            const userFeed = state.userFeeds?.find(uf => uf.feed_source_id === id);
+            const customName = userFeed?.custom_name;
+            return customName || (feed ? (feed.name || feed.url.split('/')[2]?.replace(/^www\./, '')) : `ID ${id}`);
         }).join(', ');
         loadingMessageParts.push(`Feeds: ${feedNames}`);
     }
@@ -188,7 +190,7 @@ async function initializeAppSettings() {
 
         // With feeds loaded from initial-config, we can now render them directly from state
         // without another API call. This is part of the fix for the disappearing articles bug.
-        feedHandler.renderFeedsFromState();
+        await feedHandler.renderFeedsFromState();
         uiManager.populateFeedFilterDropdown();
         uiManager.initializeFeedFilterDropdown();
 
@@ -303,7 +305,9 @@ function getSelectedFeedNamesForRefresh() {
     return state.activeFeedFilterIds
         .map(id => {
             const feed = state.dbFeedSources.find(f => f.id === id);
-            return feed ? (feed.name || feed.url.split('/')[2]?.replace(/^www\./, '')) : `Feed ${id}`;
+            const userFeed = state.userFeeds?.find(uf => uf.feed_source_id === id);
+            const customName = userFeed?.custom_name;
+            return customName || (feed ? (feed.name || feed.url.split('/')[2]?.replace(/^www\./, '')) : `Feed ${id}`);
         })
         .join(', ');
 }
@@ -314,8 +318,11 @@ function updateRefreshButtonText() {
     if (state.activeFeedFilterIds.length === 0) {
         refreshNewsBtn.textContent = "Refresh All Feeds";
     } else if (state.activeFeedFilterIds.length === 1) {
-        const feed = state.dbFeedSources.find(f => f.id === state.activeFeedFilterIds[0]);
-        const feedName = feed ? (feed.name || feed.url.split('/')[2]?.replace(/^www\./, '')) : 'this feed';
+        const feedId = state.activeFeedFilterIds[0];
+        const feed = state.dbFeedSources.find(f => f.id === feedId);
+        const userFeed = state.userFeeds?.find(uf => uf.feed_source_id === feedId);
+        const customName = userFeed?.custom_name;
+        const feedName = customName || (feed ? (feed.name || feed.url.split('/')[2]?.replace(/^www\./, '')) : 'this feed');
         refreshNewsBtn.textContent = `Refresh ${feedName}`;
     } else {
         refreshNewsBtn.textContent = `Refresh ${state.activeFeedFilterIds.length} Feeds`;
@@ -453,13 +460,17 @@ function setupGlobalEventListeners() {
 
     if (navMainBtn) {
         navMainBtn.addEventListener('click', async () => {
-            if (state.activeView === 'main' && document.getElementById('main-feed-section').classList.contains('active')) return;
+            if (state.activeView === 'main' && document.getElementById('main-feed-section').classList.contains('active') && state.activeFeedFilterIds.length === 0) return;
 
             uiManager.showSection('main-feed-section');
             state.setActiveView('main');
+            state.setActiveFeedFilterIds([]);
+            state.setActiveTagFilterIds([]);
+            state.setCurrentKeywordSearch(null);
             state.setCurrentPage(1);
-            await fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch);
+            uiManager.updateFeedFilterDropdownSelection();
             uiManager.updateNavButtonStyles();
+            await fetchAndDisplaySummaries(false, 1, null);
         });
     }
 

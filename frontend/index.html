@@ -44,17 +44,22 @@
             </div>
             <div class="header-row header-row-nav">
                 <div class="nav-left">
+                    <button id="nav-main-btn" class="view-btn active">Main Feed</button>
                     <div class="feed-filter-wrapper">
                         <select id="feed-filter-select">
-                            <option value="">All Feeds</option>
                         </select>
                     </div>
                     <div class="view-buttons">
                         <button id="nav-favorites-btn" class="view-btn">Favorites</button>
                         <button id="nav-deleted-btn" class="view-btn">Archived</button>
                     </div>
+                    <div id="active-tag-filters-display" class="active-tag-filters-display"></div>
                 </div>
                 <div class="nav-right">
+                    <div class="keyword-search-wrapper">
+                        <input type="text" id="keyword-search-input" placeholder="Search articles..." autocomplete="off">
+                        <button id="keyword-search-btn" class="nav-button">Search</button>
+                    </div>
                     <div class="tag-search-wrapper">
                         <input type="text" id="tag-search-input" placeholder="Search tags..." autocomplete="off">
                         <div id="tag-search-results" class="tag-search-results"></div>
