@@ -812,7 +812,7 @@ async def get_deleted_articles(
                 "created_at": article.created_at.isoformat() if article.created_at else None,
             })
         
-        results.sort(key=lambda x: x.get("deleted_at", ""), reverse=True)
+        results.sort(key=lambda x: x.get("deleted_at") or "", reverse=True)
         return results
     except Exception as e:
         logger.error(f"Error fetching deleted articles: {e}", exc_info=True)
