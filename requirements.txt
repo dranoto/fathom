@@ -2,9 +2,8 @@ fastapi
 uvicorn[standard]
 python-dotenv
 langchain
-langchain-google-genai
-langchain-community # For document_loaders like PlaywrightURLLoader
-google-genai
+langchain-openai
+langchain-community
 feedparser
 playwright
 sqlalchemy
@@ -13,3 +12,7 @@ unstructured
 bleach
 beautifulsoup4
 readability-lxml
+lxml_html_clean
+bcrypt>=4.0.0
+PyJWT>=2.8.0
+email-validator>=2.0.0

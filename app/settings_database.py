@@ -1,10 +1,11 @@
 # app/settings_database.py
 import os
+import json
 from sqlalchemy import create_engine, Column, String
 from sqlalchemy.orm import sessionmaker, Session as SQLAlchemySession, declarative_base
 from sqlalchemy.sql import func
 from contextlib import contextmanager
-from typing import Generator, Optional, Dict, Any
+from typing import Generator, Optional, Dict, Any, List
 
 from . import config
 
@@ -61,12 +62,24 @@ DEFAULT_SETTINGS: Dict[str, str] = {
     "summary_model_name": config.DEFAULT_SUMMARY_MODEL_NAME,
     "chat_model_name": config.DEFAULT_CHAT_MODEL_NAME,
     "tag_model_name": config.DEFAULT_TAG_MODEL_NAME,
+    "summary_temperature": str(config.SUMMARY_LLM_TEMPERATURE),
+    "chat_temperature": str(config.CHAT_LLM_TEMPERATURE),
+    "tag_temperature": str(config.TAG_LLM_TEMPERATURE),
+    "summary_max_output_tokens": str(config.SUMMARY_MAX_OUTPUT_TOKENS),
+    "chat_max_output_tokens": str(config.CHAT_MAX_OUTPUT_TOKENS),
+    "tag_max_output_tokens": str(config.TAG_MAX_OUTPUT_TOKENS),
     "articles_per_page": str(config.DEFAULT_PAGE_SIZE),
     "rss_fetch_interval_minutes": str(config.DEFAULT_RSS_FETCH_INTERVAL_MINUTES),
     "summary_prompt": config.DEFAULT_SUMMARY_PROMPT,
     "chat_prompt": config.DEFAULT_CHAT_PROMPT,
-    "tag_generation_prompt": config.DEFAULT_TAG_GENERATION_PROMPT,
-    "minimum_word_count": "100", # Default value for the new setting
+    "tag_prompt": config.DEFAULT_TAG_GENERATION_PROMPT,
+    "minimum_word_count": str(config.DEFAULT_MINIMUM_WORD_COUNT),
+    "cached_available_models": "[]",
+    "debug_level": config.DEBUG_LEVEL,
+    "show_scrape_progress": "true",
+    "show_extension_status": "true",
+    "log_scraper_details": "true",
+    "log_feed_refresh_details": "true",
 }
 
 # --- Helper functions for Configuration ---
@@ -108,6 +121,23 @@ def set_multiple_settings(db: SQLAlchemySession, settings_to_update: Dict[str, A
         # Ensure value is a string before setting
         str_value = str(value)
         set_setting(db, key, str_value)
+
+def get_cached_models(db: SQLAlchemySession) -> List[str]:
+    """
+    Retrieves cached available models list from the database.
+    Returns an empty list if not cached.
+    """
+    cached = get_setting(db, "cached_available_models", "[]")
+    try:
+        return json.loads(cached) if cached else []
+    except json.JSONDecodeError:
+        return []
+
+def set_cached_models(db: SQLAlchemySession, models: List[str]):
+    """
+    Caches the available models list in the database.
+    """
+    set_setting(db, "cached_available_models", json.dumps(models))
 
 # --- Database Initialization ---
 def create_settings_db_and_tables():

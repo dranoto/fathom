@@ -7,12 +7,15 @@ __pycache__/
 .env.*
 env/
 venv/
+venv/
+.venv/
 ENV/
 VENV/
 *.egg-info/
 *.DS_Store
 *.log
 *.db
+data/*.db
 
 # Docker (local build artifacts, usually not needed if just Dockerfile is shared)
 

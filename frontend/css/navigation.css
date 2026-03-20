@@ -5,8 +5,28 @@
     background-color: #34495e; 
     padding-top: 12px;
     padding-bottom: 12px;
-    text-align: center;
     margin-bottom: 15px; 
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.main-nav.container {
+    text-align: left;
+}
+
+.nav-left,
+.nav-right {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.nav-right {
+    justify-content: flex-end;
 }
 
 .nav-button {
@@ -14,7 +34,7 @@
     color: #ecf0f1;
     border: 1px solid #ecf0f1;
     padding: 10px 20px;
-    margin: 0 8px;
+    margin: 0;
     cursor: pointer;
     border-radius: 5px;
     font-size: 1em;
@@ -36,6 +56,22 @@
 .nav-button.refresh-button:hover {
     background-color: #c0392b; 
     border-color: #c0392b;
+}
+
+.user-menu {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.user-menu span {
+    color: #ecf0f1;
+    font-size: 0.9em;
+}
+
+.auth-buttons {
+    display: flex;
+    gap: 8px;
 }
 
 /* Feed Filter Controls */

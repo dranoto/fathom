@@ -3,24 +3,21 @@
 /* Medium screens and up - 2 columns for article grid */
 @media (min-width: 768px) {
     .results-grid {
-        /* Aim for 2 columns by setting a larger min size for items */
-        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        column-count: 2;
     }
 }
 
 /* Large screens - allow for 2 or potentially 3 if very wide for article grid */
 @media (min-width: 1200px) {
     .results-grid {
-        grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+        column-count: 2;
     }
 }
 
 /* General Responsive Adjustments for smaller screens */
 @media (max-width: 992px) { 
     .results-grid {
-        /* This will naturally make it 1 column if 350px is too wide for 2 cols */
-        /* Or more explicitly for 1 column if needed: grid-template-columns: 1fr; */
-         grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); 
+        column-count: 2;
     }
 }
 
@@ -47,7 +44,7 @@
         width: 100%;
     }
     .results-grid {
-        grid-template-columns: 1fr; /* Explicitly 1 column for smaller screens */
+        column-count: 1; /* Single column for smaller screens */
     }
     .feed-filters { /* Adjust padding for smaller screens */
         padding-left: 10px; 

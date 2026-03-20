@@ -18,6 +18,43 @@ let resultsContainer, loadingIndicator, loadingText, infiniteScrollLoadingIndica
 
 
 /**
+ * Handles read/unread toggle for an article.
+ */
+async function handleReadToggle(articleId, readBtn, articleCard) {
+    const isCurrentlyRead = readBtn.classList.contains('is-read');
+    
+    try {
+        if (isCurrentlyRead) {
+            await apiService.markArticleUnread(articleId);
+            readBtn.classList.remove('is-read');
+            articleCard.classList.remove('is-read');
+            readBtn.title = "Mark as read";
+        } else {
+            await apiService.markArticleRead(articleId);
+            readBtn.classList.add('is-read');
+            articleCard.classList.add('is-read');
+            readBtn.title = "Mark as unread";
+        }
+    } catch (error) {
+        console.error('Error toggling read state:', error);
+        alert('Error updating read state');
+    }
+}
+
+/**
+ * Handles delete for an article.
+ */
+async function handleDeleteArticle(articleId, articleCard) {
+    try {
+        await apiService.deleteArticle(articleId);
+        articleCard.remove();
+    } catch (error) {
+        console.error('Error deleting article:', error);
+    }
+}
+
+
+/**
  * Truncates text to a specified word limit.
  * @param {string} text - The text to truncate.
  * @param {number} wordLimit - The maximum number of words.
@@ -162,21 +199,27 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         return;
     }
 
-    articles.forEach((article) => {
-        // If the article is not summarizable (i.e., has no meaningful content), skip creating its card.
-        if (!article.is_summarizable) {
-            console.log(`UIManager: Skipping article ID ${article.id} ('${article.title}') because it is not summarizable.`);
-            return; // Skip this iteration
-        }
+    const filteredArticles = articles.filter(article => {
+        if (!article.is_summarizable) return false;
+        if (state.activeView !== 'favorites' && article.is_favorite) return false;
+        return true;
+    });
+
+    filteredArticles.forEach((article) => {
         const articleCard = document.createElement('div');
         articleCard.classList.add('article-card');
         articleCard.setAttribute('id', `article-db-${article.id}`);
+        
+        if (article.is_read) {
+            articleCard.classList.add('is-read');
+        }
 
         // --- ICON PLACEMENT FIX ---
-        // Regenerate Summary Button and Direct Link Icon are appended DIRECTLY to articleCard
-        // Their CSS in article_card.css uses position: absolute relative to articleCard.
-        // NO .article-card-actions wrapper div is used here.
+        // All card action buttons in one neat row
+        const actionsRow = document.createElement('div');
+        actionsRow.classList.add('card-actions-row');
 
+        // Regenerate Summary button
         const regenButton = document.createElement('button');
         regenButton.classList.add('regenerate-summary-btn');
         regenButton.title = "Regenerate Summary";
@@ -187,39 +230,86 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         };
         if (!article.is_summarizable) {
             regenButton.disabled = true;
-            regenButton.title = "This article does not have enough content to be summarized.";
+            regenButton.title = "Not enough content to summarize";
         }
-        articleCard.appendChild(regenButton); // Append directly
+        actionsRow.appendChild(regenButton);
 
+        // Direct Link icon
         const directLinkIcon = document.createElement('a');
         directLinkIcon.href = article.url;
         directLinkIcon.target = "_blank";
         directLinkIcon.rel = "noopener noreferrer";
         directLinkIcon.classList.add('direct-link-icon');
         directLinkIcon.title = "View Original Article";
-        directLinkIcon.innerHTML = "&#128279;"; // Link symbol emoji 
-        articleCard.appendChild(directLinkIcon); // Append directly
+        directLinkIcon.innerHTML = "&#128279;";
+        actionsRow.appendChild(directLinkIcon);
 
+        // Read checkbox button
+        const readBtn = document.createElement('button');
+        readBtn.classList.add('read-checkbox-btn');
+        readBtn.title = article.is_read ? "Mark as unread" : "Mark as read";
+        if (article.is_read) {
+            readBtn.classList.add('is-read');
+        }
+        readBtn.onclick = (e) => {
+            e.stopPropagation();
+            handleReadToggle(article.id, readBtn, articleCard);
+        };
+        actionsRow.appendChild(readBtn);
+
+        // Delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.classList.add('delete-article-btn');
+        deleteBtn.title = "Move to Deleted";
+        deleteBtn.innerHTML = '🗑';
+        deleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            handleDeleteArticle(article.id, articleCard);
+        };
+        actionsRow.appendChild(deleteBtn);
+
+        // Favorite button
         const favoriteBtn = document.createElement('button');
         favoriteBtn.classList.add('favorite-btn');
         if (article.is_favorite) {
             favoriteBtn.classList.add('is-favorite');
         }
-        favoriteBtn.title = "Toggle Favorite";
-        favoriteBtn.innerHTML = '&#9733;'; // Star symbol
+        favoriteBtn.title = article.is_favorite ? "Remove from favorites" : "Add to favorites";
+        favoriteBtn.innerHTML = '&#9733;';
         favoriteBtn.onclick = (e) => {
-            e.stopPropagation(); // Prevent card click events
+            e.stopPropagation();
             if (onFavoriteClickCallback && typeof onFavoriteClickCallback === 'function') {
                 onFavoriteClickCallback(article.id, favoriteBtn);
             }
         };
-        articleCard.appendChild(favoriteBtn);
+        actionsRow.appendChild(favoriteBtn);
 
-        // --- End of ICON PLACEMENT FIX ---
+        articleCard.appendChild(actionsRow);
+
+        const titleRow = document.createElement('div');
+        titleRow.classList.add('article-title-row');
 
         const titleEl = document.createElement('h3');
         titleEl.textContent = article.title || 'No Title Provided';
-        articleCard.appendChild(titleEl);
+        titleEl.style.cursor = 'pointer';
+        titleEl.onclick = () => {
+            if (articleCard.classList.contains('is-read')) {
+                handleReadToggle(article.id, readBtn, articleCard);
+            }
+        };
+        titleRow.appendChild(titleEl);
+
+        const collapsedDeleteBtn = document.createElement('button');
+        collapsedDeleteBtn.classList.add('collapsed-delete-btn');
+        collapsedDeleteBtn.title = "Delete article";
+        collapsedDeleteBtn.innerHTML = '🗑';
+        collapsedDeleteBtn.onclick = (e) => {
+            e.stopPropagation();
+            handleDeleteArticle(article.id, articleCard);
+        };
+        titleRow.appendChild(collapsedDeleteBtn);
+
+        articleCard.appendChild(titleRow);
 
         const metaInfo = document.createElement('div');
         metaInfo.classList.add('article-meta-info');
@@ -322,6 +412,10 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         const openChatBtn = document.createElement('button');
         openChatBtn.classList.add('open-chat-modal-btn');
         openChatBtn.textContent = 'Chat about this article';
+        if (article.has_chat_history) {
+            openChatBtn.classList.add('has-chat-history');
+            openChatBtn.title = 'You have chatted about this article before';
+        }
         openChatBtn.onclick = () => chatHandler.openArticleChatModal(article);
         if (!article.is_summarizable) {
             openChatBtn.disabled = true;
@@ -330,7 +424,6 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
 
         resultsContainer.appendChild(articleCard);
     });
-    console.log("UIManager: Finished appending article cards.");
 }
 
 /**

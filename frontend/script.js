@@ -5,6 +5,7 @@ import * as configManager from './js/configManager.js';
 import * as uiManager from './js/uiManager.js';
 import * as chatHandler from './js/chatHandler.js';
 import * as feedHandler from './js/feedHandler.js';
+import { initDebugManager, showDebugPanel } from './js/debugManager.js';
 
 /**
  * Main script for the NewsAI frontend.
@@ -15,6 +16,12 @@ import * as feedHandler from './js/feedHandler.js';
 let refreshNewsBtn, keywordSearchInput, keywordSearchBtn,
     deleteOldDataBtn, daysOldInput, deleteStatusMessage,
     regeneratePromptForm;
+
+// --- Auth DOM References ---
+let loginModal, registerModal, deleteAccountModal,
+    navLoginBtn, navRegisterBtn, logoutBtn, deleteAccountBtn,
+    authButtons, userMenu, userEmail,
+    loginForm, registerForm, deleteAccountForm;
 
 // --- Polling Configuration ---
 const POLLING_INTERVAL_MS = 120000; // Check for new articles every 2 minutes (120,000 ms)
@@ -169,6 +176,7 @@ async function pollForNewArticles() {
 
 async function initializeAppSettings() {
     console.log("MainScript: Initializing application settings...");
+    initializeAllDOMReferences();
     uiManager.showLoadingIndicator(true, "Initializing application...");
     try {
         const initialBackendConfig = await apiService.fetchInitialConfigData();
@@ -182,6 +190,7 @@ async function initializeAppSettings() {
         // With feeds loaded from initial-config, we can now render them directly from state
         // without another API call. This is part of the fix for the disappearing articles bug.
         feedHandler.renderFeedsFromState();
+        uiManager.renderFeedFilterButtons(handleFeedFilterClick, handleAllFeedsClick);
 
         uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter); 
         uiManager.showSection('main-feed-section'); 
@@ -238,6 +247,30 @@ function handleRemoveTagFilter(tagIdToRemove) {
     fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch);
 }
 
+function getSelectedFeedNamesForRefresh() {
+    if (state.activeFeedFilterIds.length === 0) return "ALL feeds";
+    return state.activeFeedFilterIds
+        .map(id => {
+            const feed = state.dbFeedSources.find(f => f.id === id);
+            return feed ? (feed.name || feed.url.split('/')[2]?.replace(/^www\./, '')) : `Feed ${id}`;
+        })
+        .join(', ');
+}
+
+function updateRefreshButtonText() {
+    if (!refreshNewsBtn) return;
+    
+    if (state.activeFeedFilterIds.length === 0) {
+        refreshNewsBtn.textContent = "Refresh All Feeds";
+    } else if (state.activeFeedFilterIds.length === 1) {
+        const feed = state.dbFeedSources.find(f => f.id === state.activeFeedFilterIds[0]);
+        const feedName = feed ? (feed.name || feed.url.split('/')[2]?.replace(/^www\./, '')) : 'this feed';
+        refreshNewsBtn.textContent = `Refresh ${feedName}`;
+    } else {
+        refreshNewsBtn.textContent = `Refresh ${state.activeFeedFilterIds.length} Feeds`;
+    }
+}
+
 function handleFeedFilterClick(feedId) {
     console.log(`MainScript: Feed filter clicked for ID: ${feedId}`);
     if (state.activeFeedFilterIds.includes(feedId)) { state.setActiveFeedFilterIds([]); } 
@@ -251,6 +284,7 @@ function handleFeedFilterClick(feedId) {
     uiManager.updateNavButtonStyles();
     uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter);
     state.setCurrentPage(1);
+    updateRefreshButtonText();
     fetchAndDisplaySummaries(false, 1, null); 
 }
 
@@ -260,33 +294,38 @@ function handleAllFeedsClick() {
     state.setActiveFeedFilterIds([]);
     uiManager.updateFeedFilterButtonStyles();
     state.setCurrentPage(1);
+    updateRefreshButtonText();
     fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch); 
 }
 
 async function handleFavoriteClick(articleId, favoriteButtonElement) {
     console.log(`MainScript: Favorite clicked for Article ID: ${articleId}`);
     const wasFavorite = favoriteButtonElement.classList.contains('is-favorite');
+    const isFavoritesView = state.activeView === 'favorites';
 
-    // Optimistically update the UI
-    favoriteButtonElement.classList.toggle('is-favorite');
+    const articleCard = favoriteButtonElement.closest('.article-card');
 
     try {
         const updatedArticle = await apiService.toggleFavoriteStatus(articleId);
         console.log("MainScript: Favorite status updated via API:", updatedArticle.is_favorite);
-        // Ensure UI is consistent with the response from the source of truth (the API)
+
         if (updatedArticle.is_favorite) {
             favoriteButtonElement.classList.add('is-favorite');
+            favoriteButtonElement.title = "Remove from favorites";
+            state.addLocallyFavoritedArticle(articleId);
+            if (!isFavoritesView && articleCard) {
+                articleCard.remove();
+            }
         } else {
             favoriteButtonElement.classList.remove('is-favorite');
+            favoriteButtonElement.title = "Add to favorites";
+            state.removeLocallyFavoritedArticle(articleId);
+            if (isFavoritesView && articleCard) {
+                articleCard.remove();
+            }
         }
     } catch (error) {
         console.error("MainScript: Error toggling favorite status:", error);
-        // On error, explicitly revert to the original state.
-        if (wasFavorite) {
-            favoriteButtonElement.classList.add('is-favorite');
-        } else {
-            favoriteButtonElement.classList.remove('is-favorite');
-        }
         alert(`Failed to update favorite status: ${error.message}`);
     }
 }
@@ -386,6 +425,28 @@ function setupGlobalEventListeners() {
         });
     }
 
+    const navDeletedBtn = document.getElementById('nav-deleted-btn');
+    if (navDeletedBtn) {
+        navDeletedBtn.addEventListener('click', async () => {
+            if (state.activeView === 'deleted') return;
+
+            uiManager.showSection('deleted-section');
+            state.setActiveView('deleted');
+            uiManager.updateNavButtonStyles();
+            await loadDeletedArticles();
+        });
+    }
+
+    const navSetupBtn = document.getElementById('nav-setup-btn');
+    if (navSetupBtn) {
+        navSetupBtn.addEventListener('click', async () => {
+            uiManager.showSection('setup-section');
+            state.setActiveView('setup');
+            uiManager.updateNavButtonStyles();
+            feedHandler.loadUserFeeds();
+        });
+    }
+
     // DOM elements like keywordSearchInput are now initialized at the top of this file or within this function.
     keywordSearchInput = document.getElementById('keyword-search-input'); 
     keywordSearchBtn = document.getElementById('keyword-search-btn');
@@ -410,17 +471,23 @@ function setupGlobalEventListeners() {
 
     refreshNewsBtn = document.getElementById('refresh-news-btn');
     if (refreshNewsBtn) {
+        updateRefreshButtonText();
         refreshNewsBtn.addEventListener('click', async () => {
-            if (!confirm("This will ask the backend to check all RSS feeds for new articles. This might take a moment. Continue?")) return;
+            const selectedFeedNames = getSelectedFeedNamesForRefresh();
+            const confirmMsg = state.activeFeedFilterIds.length === 0
+                ? `This will refresh ${selectedFeedNames}. This might take a moment. Continue?`
+                : `This will refresh ${selectedFeedNames}. Continue?`;
+            if (!confirm(confirmMsg)) return;
 
-            uiManager.showLoadingIndicator(true, 'Requesting backend to refresh RSS feeds...');
+            uiManager.showLoadingIndicator(true, `Refreshing ${selectedFeedNames}...`);
 
             try {
-                await apiService.triggerRssRefresh();
-
-                // Start polling for completion
+                if (state.activeFeedFilterIds.length === 1) {
+                    await apiService.refreshSingleFeed(state.activeFeedFilterIds[0]);
+                } else {
+                    await apiService.triggerRssRefresh();
+                }
                 pollForRefreshCompletion();
-
             } catch (error) {
                 console.error("MainScript: Error triggering RSS refresh:", error);
                 alert(`Error triggering refresh: ${error.message}`);
@@ -502,6 +569,19 @@ function pollForRefreshCompletion() {
 document.addEventListener('DOMContentLoaded', async () => {
     console.log("MainScript: DOMContentLoaded event fired. Script execution starting...");
 
+    setupAuthEventListeners();
+    
+    if (!apiService.isLoggedIn()) {
+        console.log("MainScript: User not logged in, showing login prompt");
+        const resultsContainer = document.getElementById('results-container');
+        if (resultsContainer) {
+            resultsContainer.innerHTML = '<p>Please <a href="#" id="auth-prompt-login">login</a> or <a href="#" id="auth-prompt-register">register</a> to continue.</p>';
+            document.getElementById('auth-prompt-login')?.addEventListener('click', (e) => { e.preventDefault(); openLoginModal(); });
+            document.getElementById('auth-prompt-register')?.addEventListener('click', (e) => { e.preventDefault(); openRegisterModal(); });
+        }
+        return;
+    }
+
     // Initialize DOM references for all modules first
     uiManager.initializeUIDOMReferences();
     configManager.initializeDOMReferences();
@@ -528,5 +608,279 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize application settings and load initial data
     await initializeAppSettings(); 
     
+    // Initialize debug manager (hidden by default, press Ctrl+Shift+D to show)
+    initDebugManager();
+    
     console.log("MainScript: Full application initialization complete.");
 });
+
+async function loadDeletedArticles() {
+    const deletedList = document.getElementById('deleted-articles-list');
+    const deletedActions = document.getElementById('deleted-actions');
+    const restoreAllBtn = document.getElementById('restore-all-deleted-btn');
+    
+    if (!deletedList) return;
+    
+    deletedList.innerHTML = '<p>Loading deleted articles...</p>';
+    
+    try {
+        const articles = await apiService.fetchDeletedArticles();
+        
+        if (articles.length === 0) {
+            deletedList.innerHTML = '<p>No deleted articles.</p>';
+            if (deletedActions) deletedActions.style.display = 'none';
+            return;
+        }
+        
+        deletedList.innerHTML = '';
+        articles.forEach(article => {
+            const item = document.createElement('div');
+            item.className = 'deleted-article-item';
+            item.innerHTML = `
+                <div class="deleted-article-info">
+                    <strong>${article.title || 'No Title'}</strong>
+                    <br>
+                    <small>Deleted ${formatTimeAgo(article.deleted_at)}</small>
+                </div>
+                <div class="deleted-article-actions">
+                    <button class="restore-btn" data-id="${article.id}">Restore</button>
+                    <button class="permanent-delete-btn" data-id="${article.id}">Delete Forever</button>
+                </div>
+            `;
+            deletedList.appendChild(item);
+            
+            item.querySelector('.restore-btn').addEventListener('click', async (e) => {
+                const id = e.target.dataset.id;
+                try {
+                    await apiService.restoreArticle(parseInt(id));
+                    await loadDeletedArticles();
+                } catch (error) {
+                    alert('Error restoring article');
+                }
+            });
+            
+            item.querySelector('.permanent-delete-btn').addEventListener('click', async (e) => {
+                const id = e.target.dataset.id;
+                if (!confirm('Permanently delete this article? This cannot be undone.')) return;
+                try {
+                    await apiService.permanentlyDeleteArticle(parseInt(id));
+                    await loadDeletedArticles();
+                } catch (error) {
+                    alert('Error deleting article');
+                }
+            });
+        });
+        
+        if (deletedActions) deletedActions.style.display = 'block';
+        
+        if (restoreAllBtn) {
+            restoreAllBtn.onclick = async () => {
+                if (!confirm('Restore all deleted articles?')) return;
+                try {
+                    for (const article of articles) {
+                        await apiService.restoreArticle(article.id);
+                    }
+                    await loadDeletedArticles();
+                } catch (error) {
+                    alert('Error restoring articles');
+                }
+            };
+        }
+        
+    } catch (error) {
+        console.error('Error loading deleted articles:', error);
+        deletedList.innerHTML = '<p>Error loading deleted articles.</p>';
+    }
+}
+
+function formatTimeAgo(dateStr) {
+    if (!dateStr) return 'unknown';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return 'today';
+    if (diffDays === 1) return 'yesterday';
+    return `${diffDays} days ago`;
+}
+
+function updateAuthUI() {
+    const loggedIn = apiService.isLoggedIn();
+    const userData = apiService.getUserData();
+    
+    if (loggedIn && userData) {
+        if (authButtons) authButtons.style.display = 'none';
+        if (userMenu) userMenu.style.display = 'flex';
+        if (userEmail) userEmail.textContent = userData.email;
+    } else {
+        if (authButtons) authButtons.style.display = 'flex';
+        if (userMenu) userMenu.style.display = 'none';
+    }
+}
+
+function openLoginModal() {
+    if (loginModal) loginModal.style.display = 'block';
+}
+
+function closeLoginModal() {
+    if (loginModal) loginModal.style.display = 'none';
+}
+
+function openRegisterModal() {
+    if (registerModal) registerModal.style.display = 'block';
+}
+
+function closeRegisterModal() {
+    if (registerModal) registerModal.style.display = 'none';
+}
+
+function openDeleteAccountModal() {
+    if (deleteAccountModal) deleteAccountModal.style.display = 'block';
+}
+
+function closeDeleteAccountModal() {
+    if (deleteAccountModal) deleteAccountModal.style.display = 'none';
+    const confirmInput = document.getElementById('delete-account-confirm');
+    if (confirmInput) confirmInput.value = '';
+}
+
+async function handleLoginSubmit(event) {
+    event.preventDefault();
+    const email = document.getElementById('login-email')?.value;
+    const password = document.getElementById('login-password')?.value;
+    
+    if (!email || !password) {
+        alert('Please enter email and password');
+        return;
+    }
+    
+    try {
+        await apiService.login(email, password);
+        closeLoginModal();
+        updateAuthUI();
+        initializeAllDOMReferences();
+        await initializeAppSettings();
+    } catch (error) {
+        alert(`Login failed: ${error.message}`);
+    }
+}
+
+async function handleRegisterSubmit(event) {
+    event.preventDefault();
+    const email = document.getElementById('register-email')?.value;
+    const password = document.getElementById('register-password')?.value;
+    const passwordConfirm = document.getElementById('register-password-confirm')?.value;
+    
+    if (!email || !password) {
+        alert('Please enter email and password');
+        return;
+    }
+    
+    if (password !== passwordConfirm) {
+        alert('Passwords do not match');
+        return;
+    }
+    
+    try {
+        await apiService.register(email, password);
+        closeRegisterModal();
+        updateAuthUI();
+        initializeAllDOMReferences();
+        await initializeAppSettings();
+    } catch (error) {
+        alert(`Registration failed: ${error.message}`);
+    }
+}
+
+let isDOMInitialized = false;
+
+function initializeAllDOMReferences() {
+    if (isDOMInitialized) return;
+    
+    uiManager.initializeUIDOMReferences();
+    configManager.initializeDOMReferences();
+    chatHandler.initializeChatDOMReferences();
+    feedHandler.initializeFeedHandlerDOMReferences(() => {
+        uiManager.renderFeedFilterButtons(handleFeedFilterClick, handleAllFeedsClick);
+    });
+    uiManager.setupUIManagerEventListeners(handleRegenerateModalUseDefaultPrompt);
+    configManager.setupFormEventListeners({
+        onArticlesPerPageChange: () => { 
+            state.setCurrentPage(1);
+            fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch);
+        }
+    });
+    chatHandler.setupChatModalEventListeners();
+    feedHandler.setupFeedHandlerEventListeners();
+    setupGlobalEventListeners();
+    isDOMInitialized = true;
+}
+
+async function handleLogout() {
+    try {
+        await apiService.logout();
+        updateAuthUI();
+        window.location.reload();
+    } catch (error) {
+        console.error('Logout error:', error);
+    }
+}
+
+async function handleDeleteAccountSubmit(event) {
+    event.preventDefault();
+    const confirm = document.getElementById('delete-account-confirm')?.value;
+    
+    if (confirm !== 'DELETE') {
+        alert('Please type DELETE to confirm');
+        return;
+    }
+    
+    try {
+        await apiService.deleteAccount(confirm);
+        closeDeleteAccountModal();
+        updateAuthUI();
+        alert('Account deleted successfully');
+        window.location.reload();
+    } catch (error) {
+        alert(`Failed to delete account: ${error.message}`);
+    }
+}
+
+function setupAuthEventListeners() {
+    navLoginBtn = document.getElementById('nav-login-btn');
+    navRegisterBtn = document.getElementById('nav-register-btn');
+    logoutBtn = document.getElementById('logout-btn');
+    deleteAccountBtn = document.getElementById('delete-account-btn');
+    loginModal = document.getElementById('login-modal');
+    registerModal = document.getElementById('register-modal');
+    deleteAccountModal = document.getElementById('delete-account-modal');
+    authButtons = document.getElementById('auth-buttons');
+    userMenu = document.getElementById('user-menu');
+    userEmail = document.getElementById('user-email');
+    loginForm = document.getElementById('login-form');
+    registerForm = document.getElementById('register-form');
+    deleteAccountForm = document.getElementById('delete-account-form');
+    
+    if (navLoginBtn) navLoginBtn.addEventListener('click', openLoginModal);
+    if (navRegisterBtn) navRegisterBtn.addEventListener('click', openRegisterModal);
+    if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+    if (deleteAccountBtn) deleteAccountBtn.addEventListener('click', openDeleteAccountModal);
+    
+    if (loginForm) loginForm.addEventListener('submit', handleLoginSubmit);
+    if (registerForm) registerForm.addEventListener('submit', handleRegisterSubmit);
+    if (deleteAccountForm) deleteAccountForm.addEventListener('submit', handleDeleteAccountSubmit);
+    
+    const closeLoginBtn = document.getElementById('close-login-modal-btn');
+    const closeRegisterBtn = document.getElementById('close-register-modal-btn');
+    const closeDeleteAccountBtn = document.getElementById('close-delete-account-modal-btn');
+    
+    if (closeLoginBtn) closeLoginBtn.addEventListener('click', closeLoginModal);
+    if (closeRegisterBtn) closeRegisterBtn.addEventListener('click', closeRegisterModal);
+    if (closeDeleteAccountBtn) closeDeleteAccountBtn.addEventListener('click', closeDeleteAccountModal);
+    
+    window.addEventListener('auth:logout', () => {
+        updateAuthUI();
+    });
+    
+    updateAuthUI();
+}

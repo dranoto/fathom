@@ -33,10 +33,24 @@
         </header>
 
         <nav class="main-nav container">
-            <button id="nav-main-btn" class="nav-button active">Main Feed</button>
-            <button id="nav-favorites-btn" class="nav-button">Favorites</button>
-            <button id="nav-setup-btn" class="nav-button">Setup</button>
-            <button id="refresh-news-btn" class="nav-button refresh-button">Manually Refresh Feeds</button>
+            <div class="nav-left">
+                <button id="nav-main-btn" class="nav-button active">Main Feed</button>
+                <button id="nav-favorites-btn" class="nav-button">Favorites</button>
+                <button id="nav-deleted-btn" class="nav-button">Deleted</button>
+                <button id="nav-setup-btn" class="nav-button">Setup</button>
+                <button id="refresh-news-btn" class="nav-button refresh-button">Manually Refresh Feeds</button>
+            </div>
+            <div class="nav-right">
+                <div id="auth-buttons" class="auth-buttons">
+                    <button id="nav-login-btn" class="nav-button">Login</button>
+                    <button id="nav-register-btn" class="nav-button">Register</button>
+                </div>
+                <div id="user-menu" class="user-menu" style="display: none;">
+                    <span id="user-email"></span>
+                    <button id="logout-btn" class="nav-button">Logout</button>
+                    <button id="delete-account-btn" class="nav-button action-button">Delete Account</button>
+                </div>
+            </div>
         </nav>
 
         <div class="search-container container">
@@ -99,24 +113,28 @@
                 </div>
 
                 <div class="setup-block">
-                    <h3>Manage RSS Feed URLs</h3>
+                    <h3>My RSS Feeds</h3>
+                    <div class="form-group">
+                        <label for="public-feeds-select">Add from existing feeds:</label>
+                        <select id="public-feeds-select">
+                            <option value="">-- Select a feed to add --</option>
+                        </select>
+                        <button type="button" id="add-from-dropdown-btn" class="nav-button" style="margin-left: 10px;">Add Selected</button>
+                    </div>
+                    <p>Or add a new feed URL:</p>
                     <form id="add-rss-feed-form">
                         <div class="form-group">
                             <label for="rss-feed-url-input">New RSS Feed URL:</label>
-                            <input type="url" id="rss-feed-url-input" placeholder="e.g., https://www.example.com/feed.xml" required>
+                            <input type="url" id="rss-feed-url-input" placeholder="e.g., https://www.example.com/feed.xml">
                         </div>
                         <div class="form-group">
                             <label for="rss-feed-name-input">Feed Name (Optional):</label>
                             <input type="text" id="rss-feed-name-input" placeholder="e.g., Example News">
                         </div>
-                        <div class="form-group">
-                            <label for="rss-feed-interval-input">Fetch Interval for this feed (minutes, optional):</label>
-                            <input type="number" id="rss-feed-interval-input" min="5" placeholder="Default: 60">
-                        </div>
-                        <button type="submit" class="submit-button">Add Feed</button>
+                        <button type="submit" class="submit-button">Add New Feed</button>
                     </form>
-                    <h4>Current RSS Feeds in Database:</h4>
-                    <ul id="rss-feeds-list"></ul>
+                    <h4>Your Current Feeds:</h4>
+                    <div id="user-feeds-list" class="user-feeds-list"></div>
                 </div>
 
                 <div class="setup-block">
@@ -161,6 +179,9 @@
                             <label for="tag-model-select">Tag Generation Model:</label>
                             <select id="tag-model-select" name="tag-model-select"></select>
                         </div>
+                        <div class="form-group">
+                            <button type="button" id="refresh-models-btn" class="secondary-button">Refresh Models</button>
+                        </div>
                         <button type="submit" class="submit-button">Save Models</button>
                     </form>
                 </div>
@@ -192,13 +213,79 @@
                     <p id="delete-status-message" style="margin-top:10px;"></p>
                 </div>
             </section>
+
+            <section id="deleted-section" class="content-section">
+                <h2>Deleted Articles</h2>
+                <p>Articles are automatically purged after 30 days.</p>
+                <div id="deleted-articles-list"></div>
+                <div id="deleted-actions" style="margin-top: 20px; display: none;">
+                    <button id="restore-all-deleted-btn" class="action-button">Restore All</button>
+                </div>
+            </section>
         </main>
         <footer>
             <div class="container">
                 <p>&copy; 2025 AI News Today. All summaries and tags generated by AI.</p>
             </div>
         </footer>
-    </div> <div id="regenerate-summary-modal" class="modal" style="display:none;">
+    </div>
+
+    <div id="login-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <span class="close-button" id="close-login-modal-btn">&times;</span>
+            <h3>Login</h3>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="login-email">Email:</label>
+                    <input type="email" id="login-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password:</label>
+                    <input type="password" id="login-password" required>
+                </div>
+                <button type="submit" class="submit-button">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="register-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <span class="close-button" id="close-register-modal-btn">&times;</span>
+            <h3>Register</h3>
+            <form id="register-form">
+                <div class="form-group">
+                    <label for="register-email">Email:</label>
+                    <input type="email" id="register-email" required>
+                </div>
+                <div class="form-group">
+                    <label for="register-password">Password:</label>
+                    <input type="password" id="register-password" required>
+                </div>
+                <div class="form-group">
+                    <label for="register-password-confirm">Confirm Password:</label>
+                    <input type="password" id="register-password-confirm" required>
+                </div>
+                <button type="submit" class="submit-button">Register</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="delete-account-modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <span class="close-button" id="close-delete-account-modal-btn">&times;</span>
+            <h3>Delete Account</h3>
+            <p>Warning: This will permanently delete your account and all your data (feeds, settings, favorites, chat history). Global articles will NOT be deleted.</p>
+            <p>Type <strong>DELETE</strong> to confirm:</p>
+            <form id="delete-account-form">
+                <div class="form-group">
+                    <input type="text" id="delete-account-confirm" required>
+                </div>
+                <button type="submit" class="action-button clear-all">Delete My Account</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="regenerate-summary-modal" class="modal" style="display:none;">
         <div class="modal-content">
             <span class="close-button" id="close-regenerate-modal-btn">&times;</span>
             <h3>Regenerate Summary</h3>

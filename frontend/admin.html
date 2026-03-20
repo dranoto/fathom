@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - AI News Today</title>
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/layout.css">
+    <link rel="stylesheet" href="/static/css/navigation.css">
+    <link rel="stylesheet" href="/static/css/forms.css">
+    <style>
+        .admin-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .admin-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 15px;
+        }
+        .admin-section {
+            background: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .admin-section h2 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #eee;
+            font-weight: 600;
+        }
+        tr:hover {
+            background: #f5f5f5;
+        }
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .tab-container {
+            margin-bottom: 20px;
+        }
+        .tab-buttons {
+            display: flex;
+            gap: 5px;
+            border-bottom: 2px solid #ddd;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            background: #eee;
+            border: none;
+            border-radius: 4px 4px 0 0;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .tab-btn.active {
+            background: #f9f9f9;
+            border-bottom: 2px solid #f9f9f9;
+            margin-bottom: -2px;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .alert {
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+        }
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .model-input {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .model-input input {
+            flex: 1;
+        }
+        .model-input button {
+            flex-shrink: 0;
+        }
+        .feed-stats {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+        }
+        .feed-stat {
+            background: #e9ecef;
+            padding: 10px 15px;
+            border-radius: 4px;
+        }
+        .feed-stat strong {
+            font-size: 20px;
+            color: #007bff;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="nav-brand">
+            <a href="/" class="brand-link">AI News Today</a>
+        </div>
+        <div class="nav-links">
+            <a href="/">News Feed</a>
+            <a href="/setup">Setup</a>
+            <a href="/admin" class="active">Admin</a>
+        </div>
+        <div class="nav-user" id="navUser"></div>
+    </nav>
+
+    <main class="admin-container">
+        <div class="admin-header">
+            <h1>Admin Panel</h1>
+            <button class="btn btn-secondary" onclick="logout()">Logout</button>
+        </div>
+
+        <div id="alertContainer"></div>
+
+        <div class="tab-container">
+            <div class="tab-buttons">
+                <button class="tab-btn active" onclick="showTab('users')">Users</button>
+                <button class="tab-btn" onclick="showTab('feeds')">Feeds</button>
+                <button class="tab-btn" onclick="showTab('settings')">Settings</button>
+            </div>
+        </div>
+
+        <div id="usersTab" class="tab-content active">
+            <div class="admin-section">
+                <h2>Users</h2>
+                <div id="usersList">
+                    <div class="loading">Loading users...</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="feedsTab" class="tab-content">
+            <div class="admin-section">
+                <h2>Global Feeds</h2>
+                <div class="feed-stats">
+                    <div class="feed-stat">
+                        <strong id="totalFeeds">0</strong> Total Feeds
+                    </div>
+                    <div class="feed-stat">
+                        <strong id="totalArticles">0</strong> Total Articles
+                    </div>
+                </div>
+                
+                <div class="admin-section" style="background: #fff;">
+                    <h3>Add New Feed</h3>
+                    <form id="addFeedForm" onsubmit="addFeed(event)">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="feedUrl">Feed URL *</label>
+                                <input type="url" id="feedUrl" required placeholder="https://example.com/feed.xml">
+                            </div>
+                            <div class="form-group">
+                                <label for="feedName">Name (optional)</label>
+                                <input type="text" id="feedName" placeholder="My Feed">
+                            </div>
+                            <div class="form-group">
+                                <label for="feedInterval">Fetch Interval (minutes)</label>
+                                <input type="number" id="feedInterval" value="60" min="5">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Add Feed</button>
+                    </form>
+                </div>
+
+                <div id="feedsList">
+                    <div class="loading">Loading feeds...</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="settingsTab" class="tab-content">
+            <div class="admin-section">
+                <h2>Global Model Settings</h2>
+                <div id="settingsForm">
+                    <div class="loading">Loading settings...</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script type="module">
+        import * as apiService from '/static/js/apiService.js';
+        
+        window.logout = function() {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user_data');
+            window.location.href = '/';
+        };
+
+        window.showTab = function(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabName + 'Tab').classList.add('active');
+            event.target.classList.add('active');
+            
+            if (tabName === 'settings') {
+                loadSettings();
+            } else if (tabName === 'users') {
+                loadUsers();
+            } else if (tabName === 'feeds') {
+                loadFeeds();
+            }
+        };
+
+        function showAlert(message, type = 'success') {
+            const container = document.getElementById('alertContainer');
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => container.innerHTML = '', 5000);
+        }
+
+        async function loadUsers() {
+            try {
+                const users = await apiService.getAdminUsers();
+                const container = document.getElementById('usersList');
+                
+                if (users.length === 0) {
+                    container.innerHTML = '<p>No users found.</p>';
+                    return;
+                }
+                
+                container.innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Admin</th>
+                                <th>Created</th>
+                                <th>Feeds</th>
+                                <th>Article States</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${users.map(u => `
+                                <tr>
+                                    <td>${u.email}</td>
+                                    <td>${u.is_admin ? 'Yes' : 'No'}</td>
+                                    <td>${u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}</td>
+                                    <td>${u.feed_count}</td>
+                                    <td>${u.article_state_count}</td>
+                                    <td>
+                                        ${u.is_admin ? '<em>Cannot delete admin</em>' : 
+                                            `<button class="btn btn-danger" onclick="deleteUser(${u.id}, '${u.email}')">Delete</button>`}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                document.getElementById('usersList').innerHTML = 
+                    '<p class="alert alert-error">Error loading users: ' + error.message + '</p>';
+            }
+        }
+
+        window.deleteUser = async function(userId, email) {
+            if (!confirm(`Are you sure you want to delete user "${email}"? This will delete all their data.`)) {
+                return;
+            }
+            try {
+                await apiService.deleteAdminUser(userId);
+                showAlert(`User ${email} deleted`);
+                loadUsers();
+            } catch (error) {
+                showAlert('Error deleting user: ' + error.message, 'error');
+            }
+        };
+
+        async function loadFeeds() {
+            try {
+                const feeds = await apiService.getAdminFeeds();
+                const container = document.getElementById('feedsList');
+                document.getElementById('totalFeeds').textContent = feeds.length;
+                document.getElementById('totalArticles').textContent = 
+                    feeds.reduce((sum, f) => sum + f.article_count, 0);
+                
+                if (feeds.length === 0) {
+                    container.innerHTML = '<p>No feeds found.</p>';
+                    return;
+                }
+                
+                container.innerHTML = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>URL</th>
+                                <th>Users</th>
+                                <th>Articles</th>
+                                <th>Interval</th>
+                                <th>Last Fetch</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${feeds.map(f => `
+                                <tr>
+                                    <td>${f.name}</td>
+                                    <td><code>${f.url}</code></td>
+                                    <td>${f.user_count}</td>
+                                    <td>${f.article_count}</td>
+                                    <td>${f.fetch_interval_minutes}m</td>
+                                    <td>${f.last_fetch_at ? new Date(f.last_fetch_at).toLocaleString() : 'Never'}</td>
+                                    <td>
+                                        ${f.user_count > 0 ? 
+                                            `<em>Has users</em>` : 
+                                            `<button class="btn btn-danger" onclick="deleteFeed(${f.id}, '${f.name}')">Delete</button>`}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (error) {
+                document.getElementById('feedsList').innerHTML = 
+                    '<p class="alert alert-error">Error loading feeds: ' + error.message + '</p>';
+            }
+        }
+
+        window.addFeed = async function(event) {
+            event.preventDefault();
+            const url = document.getElementById('feedUrl').value;
+            const name = document.getElementById('feedName').value || null;
+            const interval = parseInt(document.getElementById('feedInterval').value) || 60;
+            
+            try {
+                await apiService.addAdminFeed({ url, name, fetch_interval_minutes: interval });
+                showAlert('Feed added successfully');
+                document.getElementById('addFeedForm').reset();
+                document.getElementById('feedInterval').value = 60;
+                loadFeeds();
+            } catch (error) {
+                showAlert('Error adding feed: ' + error.message, 'error');
+            }
+        };
+
+        window.deleteFeed = async function(feedId, feedName) {
+            if (!confirm(`Are you sure you want to delete feed "${feedName}"? All articles will be deleted.`)) {
+                return;
+            }
+            try {
+                await apiService.deleteAdminFeed(feedId);
+                showAlert(`Feed ${feedName} deleted`);
+                loadFeeds();
+            } catch (error) {
+                showAlert('Error deleting feed: ' + error.message, 'error');
+            }
+        };
+
+        async function loadSettings() {
+            try {
+                const settings = await apiService.getAdminSettings();
+                const container = document.getElementById('settingsForm');
+                
+                container.innerHTML = `
+                    <h3 style="margin-top: 0;">Models</h3>
+                    <div class="form-group">
+                        <label>Summary Model</label>
+                        <div class="model-input">
+                            <input type="text" id="summaryModel" value="${settings.summary_model || ''}">
+                            <button class="btn btn-primary" onclick="updateSetting('summary_model', document.getElementById('summaryModel').value)">Update</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Chat Model</label>
+                        <div class="model-input">
+                            <input type="text" id="chatModel" value="${settings.chat_model || ''}">
+                            <button class="btn btn-primary" onclick="updateSetting('chat_model', document.getElementById('chatModel').value)">Update</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Tag Model</label>
+                        <div class="model-input">
+                            <input type="text" id="tagModel" value="${settings.tag_model || ''}">
+                            <button class="btn btn-primary" onclick="updateSetting('tag_model', document.getElementById('tagModel').value)">Update</button>
+                        </div>
+                    </div>
+                    
+                    <h3>Max Tokens</h3>
+                    <div class="form-group">
+                        <label>Summary Max Tokens</label>
+                        <div class="model-input">
+                            <input type="number" id="summaryMaxTokens" value="${settings.summary_max_output_tokens || '1024'}">
+                            <button class="btn btn-primary" onclick="updateSetting('summary_max_output_tokens', document.getElementById('summaryMaxTokens').value)">Update</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Chat Max Tokens</label>
+                        <div class="model-input">
+                            <input type="number" id="chatMaxTokens" value="${settings.chat_max_output_tokens || '4096'}">
+                            <button class="btn btn-primary" onclick="updateSetting('chat_max_output_tokens', document.getElementById('chatMaxTokens').value)">Update</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Tag Max Tokens</label>
+                        <div class="model-input">
+                            <input type="number" id="tagMaxTokens" value="${settings.tag_max_output_tokens || '100'}">
+                            <button class="btn btn-primary" onclick="updateSetting('tag_max_output_tokens', document.getElementById('tagMaxTokens').value)">Update</button>
+                        </div>
+                    </div>
+                    
+                    <h3>Default Prompts (used when user has not customized)</h3>
+                    <div class="form-group">
+                        <label>Summary Prompt</label>
+                        <textarea id="summaryPrompt" rows="4" style="width: 100%; padding: 8px;">${(settings.summary_prompt || '').replace(/"/g, '&quot;')}</textarea>
+                        <button class="btn btn-primary" onclick="updateSetting('summary_prompt', document.getElementById('summaryPrompt').value)">Update</button>
+                    </div>
+                    <div class="form-group">
+                        <label>Chat Prompt</label>
+                        <textarea id="chatPrompt" rows="4" style="width: 100%; padding: 8px;">${(settings.chat_prompt || '').replace(/"/g, '&quot;')}</textarea>
+                        <button class="btn btn-primary" onclick="updateSetting('chat_prompt', document.getElementById('chatPrompt').value)">Update</button>
+                    </div>
+                    <div class="form-group">
+                        <label>Tag Generation Prompt</label>
+                        <textarea id="tagPrompt" rows="4" style="width: 100%; padding: 8px;">${(settings.tag_prompt || '').replace(/"/g, '&quot;')}</textarea>
+                        <button class="btn btn-primary" onclick="updateSetting('tag_prompt', document.getElementById('tagPrompt').value)">Update</button>
+                    </div>
+                `;
+            } catch (error) {
+                document.getElementById('settingsForm').innerHTML = 
+                    '<p class="alert alert-error">Error loading settings: ' + error.message + '</p>';
+            }
+        }
+
+        window.updateSetting = async function(key, value) {
+            try {
+                await apiService.updateAdminSettings({ [key]: value });
+                showAlert('Setting updated');
+            } catch (error) {
+                showAlert('Error updating setting: ' + error.message, 'error');
+            }
+        };
+
+        async function checkAuth() {
+            const userData = localStorage.getItem('user_data');
+            if (!userData) {
+                window.location.href = '/';
+                return;
+            }
+            const user = JSON.parse(userData);
+            if (!user.is_admin) {
+                document.getElementById('navUser').innerHTML = '<span>Not admin</span>';
+                showAlert('Admin access required', 'error');
+                return;
+            }
+            document.getElementById('navUser').innerHTML = `<span>${user.email}</span>`;
+            loadUsers();
+        }
+
+        checkAuth();
+    </script>
+</body>
+</html>

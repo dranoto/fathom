@@ -3,19 +3,37 @@ import asyncio
 import logging
 import os
 import tempfile
-import shutil # For cleaning up the temp user data directory
-import re # <<< IMPORT ADDED HERE
+import shutil
+import re
+import time
+from typing import Dict, Any, List, Optional
 from playwright.async_api import async_playwright, BrowserContext, Page
-from readability import Document as ReadabilityDocument # For extracting main content
-from typing import Optional, List, Dict, Any # Make sure List is imported
+from readability import Document as ReadabilityDocument
+from langchain_core.documents import Document as LangchainDocument
 
-from langchain_core.documents import Document as LangchainDocument # Use Langchain Document type
+from . import config as app_config
 
-from . import config as app_config # For PATH_TO_EXTENSION and USE_HEADLESS_BROWSER
+# Global state for extension status (updated during scraping)
+_extension_status = {
+    "loaded": False,
+    "service_workers": 0,
+    "version": "unknown",
+    "last_checked": None,
+    "path": None
+}
+
+def get_extension_status() -> dict:
+    return _extension_status.copy()
+
+def _set_extension_status(loaded: bool, service_workers: int = 0, version: str = "unknown"):
+    _extension_status["loaded"] = loaded
+    _extension_status["service_workers"] = service_workers
+    _extension_status["version"] = version
+    _extension_status["last_checked"] = time.time()
+    _extension_status["path"] = app_config.PATH_TO_EXTENSION
 
 # Configure logging
 logger = logging.getLogger(__name__)
-# Ensure logger is configured (it should be by main_api.py, but good practice)
 if not logger.hasHandlers():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -81,7 +99,7 @@ async def _scrape_single_url_with_playwright_and_readability(page: Page, url: st
 
     try:
         await page.goto(url, timeout=app_config.PLAYWRIGHT_TIMEOUT, wait_until='domcontentloaded')
-        await page.wait_for_timeout(3000) 
+        await page.wait_for_timeout(app_config.PLAYWRIGHT_PAGE_WAIT_MS)
         full_page_html = await page.content()
 
         if not full_page_html:
@@ -108,8 +126,12 @@ async def _scrape_single_url_with_playwright_and_readability(page: Page, url: st
             msg = f"Extracted text content too short (<50 words) or empty for {url} after Readability. Word count: {word_count}"
             logger.warning(msg)
             metadata["error"] = (metadata.get("error", "") + " | " + msg).strip(" | ")
+            if app_config.is_debug_level("verbose"):
+                logger.debug(f"DEBUG: Scrape FAILED - URL: {url}, Word count: {word_count}, Error: {metadata.get('error')}")
         else:
             logger.info(f"Successfully processed with Readability: {url} (Final Word Count: {word_count})")
+            if app_config.is_debug_level("verbose"):
+                logger.debug(f"DEBUG: Scrape SUCCESS - URL: {url}, Word count: {word_count}, Extension loaded: {_extension_status['loaded']}")
 
     except Exception as e:
         error_msg = f"General Playwright/Readability failure for {url}: {type(e).__name__} - {str(e)}"
@@ -170,7 +192,7 @@ async def scrape_urls(
             headless=use_headless_browser,
             channel='chromium', 
             args=browser_launch_args,
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", 
+            user_agent=app_config.USER_AGENT, 
             ignore_https_errors=True,
             viewport={'width': 1280, 'height': 720} 
         )
@@ -182,19 +204,26 @@ async def scrape_urls(
                 await asyncio.sleep(3) 
                 service_workers = context.service_workers
                 if service_workers:
-                    logger.info(f"Found {len(service_workers)} service worker(s). Extension likely active (Manifest v3).")
-                    for sw in service_workers: logger.info(f"Service Worker URL: {sw.url}")
+                    sw_count = len(service_workers)
+                    logger.info(f"Found {sw_count} service worker(s). Extension likely active (Manifest v3).")
+                    for sw in service_workers: 
+                        logger.info(f"Service Worker URL: {sw.url}")
+                    _set_extension_status(loaded=True, service_workers=sw_count, version="4.1.8.1")
                 else:
                     logger.info("No service workers found immediately. If using an MV3 extension, this might indicate an issue or it has no active SW.")
+                    _set_extension_status(loaded=True, service_workers=0, version="unknown")
             except Exception as e_sw:
                 logger.warning(f"Error checking for service worker (optional check): {e_sw}")
+                _set_extension_status(loaded=False, service_workers=0, version="error")
+        else:
+            _set_extension_status(loaded=False, service_workers=0, version="not_loaded")
         
         page: Page = await context.new_page() 
 
         for url in urls:
             doc = await _scrape_single_url_with_playwright_and_readability(page, url)
             all_loaded_docs.append(doc)
-            await asyncio.sleep(1) 
+            await asyncio.sleep(app_config.SCRAPE_REQUEST_DELAY_SEC) 
 
     except Exception as e:
         logger.error(f"Critical error during Playwright session setup or execution: {e}", exc_info=True)

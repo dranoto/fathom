@@ -69,8 +69,12 @@
 
 /* Article Chat Modal Specific Styling */
 .chat-modal-container .modal-content { 
-    max-width: 1000px; 
+    max-width: 1000px;
     width: 90%;      
+    resize: both;
+    overflow: auto;
+    min-width: 400px;
+    min-height: 400px;
 }
 
 .chat-modal-body {

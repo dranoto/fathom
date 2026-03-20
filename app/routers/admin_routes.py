@@ -1,68 +1,257 @@
 # app/routers/admin_routes.py
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Query
+from datetime import datetime
+from typing import List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from pydantic import BaseModel
 from sqlalchemy.orm import Session as SQLAlchemySession
-from datetime import datetime, timezone, timedelta
 
-# Relative imports for modules within the 'app' directory
-from .. import database # For get_db and ORM models (Article)
+from .. import database
+from .. import config as app_config
+from .auth_routes import get_current_user
 
-# Initialize logger for this module
 logger = logging.getLogger(__name__)
 
-# Create an APIRouter instance for these admin-related routes
-router = APIRouter(
-    prefix="/api/admin",  # Common path prefix for admin routes
-    tags=["administration"]  # For grouping in OpenAPI documentation
-)
+router = APIRouter(prefix="/api/admin", tags=["admin"])
 
-@router.delete("/cleanup-old-data", status_code=200)
-async def cleanup_old_data_endpoint(
-    days_old: int = Query(30, ge=1, description="Minimum age in days for articles to be deleted."),
-    db: SQLAlchemySession = Depends(database.get_db)
+def require_admin(current_user: database.User = Depends(get_current_user)):
+    if not getattr(current_user, 'is_admin', False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
+
+class UserResponse(BaseModel):
+    id: int
+    email: str
+    is_admin: bool
+    created_at: Optional[datetime] = None
+    feed_count: int = 0
+    article_state_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+class FeedSourceWithUserCount(BaseModel):
+    id: int
+    url: str
+    name: str
+    fetch_interval_minutes: int
+    user_count: int
+    article_count: int
+    last_fetch_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+class GlobalSettingsResponse(BaseModel):
+    summary_model: Optional[str] = None
+    chat_model: Optional[str] = None
+    tag_model: Optional[str] = None
+    summary_max_output_tokens: Optional[int] = None
+    chat_max_output_tokens: Optional[int] = None
+    tag_max_output_tokens: Optional[int] = None
+    summary_prompt: Optional[str] = None
+    chat_prompt: Optional[str] = None
+    tag_prompt: Optional[str] = None
+
+class UpdateGlobalSettingsRequest(BaseModel):
+    summary_model: Optional[str] = None
+    chat_model: Optional[str] = None
+    tag_model: Optional[str] = None
+    summary_max_output_tokens: Optional[int] = None
+    chat_max_output_tokens: Optional[int] = None
+    tag_max_output_tokens: Optional[int] = None
+    summary_prompt: Optional[str] = None
+    chat_prompt: Optional[str] = None
+    tag_prompt: Optional[str] = None
+
+class AddFeedRequest(BaseModel):
+    url: str
+    name: Optional[str] = None
+    fetch_interval_minutes: Optional[int] = None
+
+from datetime import datetime
+from typing import Optional
+from pydantic import BaseModel
+
+@router.get("/users")
+async def get_all_users(
+    db: SQLAlchemySession = Depends(database.get_db),
+    admin_user: database.User = Depends(require_admin)
 ):
-    """
-    Deletes articles (and their related summaries, chat history, and tag associations
-    via database cascade rules) that were published more than a specified number of days ago.
-    """
-    if days_old <= 0:
-        logger.error(f"Validation Error: days_old parameter must be positive, received {days_old}.")
-        # Although Query(ge=1) should handle this, an explicit check is good practice.
-        raise HTTPException(status_code=400, detail="days_old parameter must be a positive integer.")
+    """Get all users with their feed and article state counts."""
+    users = db.query(database.User).all()
+    result = []
+    for user in users:
+        feed_count = db.query(database.UserFeedSubscription).filter(
+            database.UserFeedSubscription.user_id == user.id
+        ).count()
+        state_count = db.query(database.UserArticleState).filter(
+            database.UserArticleState.user_id == user.id
+        ).count()
+        result.append(UserResponse(
+            id=user.id,
+            email=user.email,
+            is_admin=getattr(user, 'is_admin', False),
+            created_at=user.created_at,
+            feed_count=feed_count,
+            article_state_count=state_count
+        ))
+    return result
 
-    # Calculate the cutoff date for deletion. Articles published before this date will be deleted.
-    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_old)
-    logger.info(f"API Call: Admin request to delete data older than {days_old} days (i.e., published before {cutoff_date.strftime('%Y-%m-%d %H:%M:%S %Z')}).")
-
-    # Find articles that meet the deletion criteria
-    # We only need their IDs for targeted deletion if we weren't relying on cascade,
-    # but for counting and logging, fetching them (or just their count) is useful.
-    articles_to_delete_query = db.query(database.Article).filter(database.Article.published_date < cutoff_date)
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: int,
+    db: SQLAlchemySession = Depends(database.get_db),
+    admin_user: database.User = Depends(require_admin)
+):
+    """Delete a user and all their data (cascades)."""
+    if user_id == admin_user.id:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
     
-    # Get a list of IDs for logging or more complex scenarios (not strictly needed if just deleting)
-    # For large datasets, directly counting and then deleting without fetching all objects is more efficient.
-    # article_ids_to_delete = [article.id for article in articles_to_delete_query.all()]
-    # article_deleted_count = len(article_ids_to_delete)
+    user = db.query(database.User).filter(database.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    email = user.email
+    db.delete(user)
+    db.commit()
+    logger.info(f"Admin {admin_user.id} deleted user {user_id} ({email})")
+    return {"message": f"User {email} deleted"}
 
-    # More efficient way to count before deleting for large datasets:
-    article_deleted_count = articles_to_delete_query.count()
+@router.get("/feeds")
+async def get_all_feeds(
+    db: SQLAlchemySession = Depends(database.get_db),
+    admin_user: database.User = Depends(require_admin)
+):
+    """Get all feed sources with user counts."""
+    feeds = db.query(database.FeedSource).all()
+    result = []
+    for feed in feeds:
+        user_count = db.query(database.UserFeedSubscription).filter(
+            database.UserFeedSubscription.feed_source_id == feed.id
+        ).count()
+        article_count = db.query(database.Article).filter(
+            database.Article.feed_source_id == feed.id
+        ).count()
+        result.append(FeedSourceWithUserCount(
+            id=feed.id,
+            url=feed.url,
+            name=feed.name,
+            fetch_interval_minutes=feed.fetch_interval_minutes or 60,
+            user_count=user_count,
+            article_count=article_count,
+            last_fetch_at=feed.last_fetched_at
+        ))
+    return result
 
-    if article_deleted_count > 0:
-        logger.info(f"Found {article_deleted_count} articles to delete.")
-        # Perform the deletion.
-        # The `delete(synchronize_session=False)` is generally efficient.
-        # SQLAlchemy's ORM relationships with `cascade="all, delete-orphan"` on the Article model
-        # will handle the deletion of related Summary, ChatHistory, and article_tag_association records.
-        articles_to_delete_query.delete(synchronize_session=False)
-        
+@router.post("/feeds")
+async def add_feed_source(
+    request: AddFeedRequest,
+    db: SQLAlchemySession = Depends(database.get_db),
+    admin_user: database.User = Depends(require_admin)
+):
+    """Add a new global feed source."""
+    existing = db.query(database.FeedSource).filter(
+        database.FeedSource.url == request.url
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Feed URL already exists")
+    
+    feed_name = request.name
+    if not feed_name:
         try:
-            db.commit()
-            logger.info(f"Successfully deleted {article_deleted_count} old article records and their related data (via cascade).")
-        except Exception as e:
-            db.rollback()
-            logger.error(f"Error during commit after deleting old articles: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Failed to commit deletions: {str(e)}")
-    else:
-        logger.info("No old articles found to delete based on the specified criteria.")
+            feed_name = request.url.split('/')[2].replace("www.", "")
+        except IndexError:
+            feed_name = request.url
+    
+    new_feed = database.FeedSource(
+        url=request.url,
+        name=feed_name,
+        fetch_interval_minutes=request.fetch_interval_minutes or app_config.DEFAULT_RSS_FETCH_INTERVAL_MINUTES
+    )
+    db.add(new_feed)
+    db.commit()
+    db.refresh(new_feed)
+    
+    logger.info(f"Admin {admin_user.id} added new feed source: {request.url}")
+    return {"id": new_feed.id, "url": new_feed.url, "name": new_feed.name}
 
-    return {"message": f"Cleanup process completed. Deleted {article_deleted_count} articles (and related data) older than {days_old} days."}
+@router.delete("/feeds/{feed_id}")
+async def delete_feed_source(
+    feed_id: int,
+    db: SQLAlchemySession = Depends(database.get_db),
+    admin_user: database.User = Depends(require_admin)
+):
+    """Delete a feed source. Cascade deletes all user subscriptions."""
+    feed_db = db.query(database.FeedSource).filter(
+        database.FeedSource.id == feed_id
+    ).first()
+    if not feed_db:
+        raise HTTPException(status_code=404, detail="Feed not found")
+    
+    user_count = db.query(database.UserFeedSubscription).filter(
+        database.UserFeedSubscription.feed_source_id == feed_id
+    ).count()
+    
+    db.delete(feed_db)
+    db.commit()
+    logger.info(f"Admin {admin_user.id} deleted feed source {feed_id} ({user_count} subscriptions cascade deleted)")
+    return {"message": "Feed deleted"}
+
+@router.get("/settings/global")
+async def get_global_settings(
+    db: SQLAlchemySession = Depends(database.get_db),
+    admin_user: database.User = Depends(require_admin)
+):
+    """Get global model and prompt settings."""
+    from .. import settings_database
+    
+    def get_int(db, key, default):
+        val = settings_database.get_setting(db, key, str(default))
+        return int(val) if val else default
+    
+    with settings_database.db_session_scope() as settings_db:
+        return GlobalSettingsResponse(
+            summary_model=settings_database.get_setting(settings_db, "summary_model_name", app_config.DEFAULT_SUMMARY_MODEL_NAME),
+            chat_model=settings_database.get_setting(settings_db, "chat_model_name", app_config.DEFAULT_CHAT_MODEL_NAME),
+            tag_model=settings_database.get_setting(settings_db, "tag_model_name", app_config.DEFAULT_TAG_MODEL_NAME),
+            summary_max_output_tokens=get_int(settings_db, "summary_max_output_tokens", app_config.SUMMARY_MAX_OUTPUT_TOKENS),
+            chat_max_output_tokens=get_int(settings_db, "chat_max_output_tokens", app_config.CHAT_MAX_OUTPUT_TOKENS),
+            tag_max_output_tokens=get_int(settings_db, "tag_max_output_tokens", app_config.TAG_MAX_OUTPUT_TOKENS),
+            summary_prompt=settings_database.get_setting(settings_db, "summary_prompt", app_config.DEFAULT_SUMMARY_PROMPT),
+            chat_prompt=settings_database.get_setting(settings_db, "chat_prompt", app_config.DEFAULT_CHAT_PROMPT),
+            tag_prompt=settings_database.get_setting(settings_db, "tag_prompt", app_config.DEFAULT_TAG_GENERATION_PROMPT),
+        )
+
+@router.put("/settings/global")
+async def update_global_settings(
+    request: UpdateGlobalSettingsRequest,
+    db: SQLAlchemySession = Depends(database.get_db),
+    admin_user: database.User = Depends(require_admin)
+):
+    """Update global model and prompt settings."""
+    from .. import settings_database
+    
+    with settings_database.db_session_scope() as settings_db:
+        if request.summary_model is not None:
+            settings_database.set_setting(settings_db, "summary_model_name", request.summary_model)
+        if request.chat_model is not None:
+            settings_database.set_setting(settings_db, "chat_model_name", request.chat_model)
+        if request.tag_model is not None:
+            settings_database.set_setting(settings_db, "tag_model_name", request.tag_model)
+        if request.summary_max_output_tokens is not None:
+            settings_database.set_setting(settings_db, "summary_max_output_tokens", str(request.summary_max_output_tokens))
+        if request.chat_max_output_tokens is not None:
+            settings_database.set_setting(settings_db, "chat_max_output_tokens", str(request.chat_max_output_tokens))
+        if request.tag_max_output_tokens is not None:
+            settings_database.set_setting(settings_db, "tag_max_output_tokens", str(request.tag_max_output_tokens))
+        if request.summary_prompt is not None:
+            settings_database.set_setting(settings_db, "summary_prompt", request.summary_prompt)
+        if request.chat_prompt is not None:
+            settings_database.set_setting(settings_db, "chat_prompt", request.chat_prompt)
+        if request.tag_prompt is not None:
+            settings_database.set_setting(settings_db, "tag_prompt", request.tag_prompt)
+        
+        logger.info(f"Admin {admin_user.id} updated global settings")
+        return {"message": "Settings updated"}

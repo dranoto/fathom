@@ -8,6 +8,7 @@
 
 // --- Core Application State ---
 export let dbFeedSources = []; 
+export let userFeeds = [];
 export let articlesPerPage = 6;
 export let minimumWordCount = 100;
 export let currentPage = 1; 
@@ -47,6 +48,9 @@ export let currentTagModel = '';
 
 export let globalRssFetchInterval = 60; 
 
+// --- Locally tracked favorited articles (to hide from main page) ---
+export let locallyFavoritedArticleIds = new Set();
+
 // --- Filters ---
 export let activeFeedFilterIds = []; 
 export let activeTagFilterIds = []; 
@@ -57,6 +61,10 @@ export let activeView = 'main'; // 'main' or 'favorites'
 
 export function setDbFeedSources(sources) {
     dbFeedSources = Array.isArray(sources) ? sources : [];
+}
+
+export function setUserFeeds(feeds) {
+    userFeeds = Array.isArray(feeds) ? feeds : [];
 }
 
 export function setArticlesPerPage(count) {
@@ -187,6 +195,18 @@ export function setLastKnownLatestArticleTimestamp(timestamp) {
     } else {
         console.warn("State: Attempted to set invalid lastKnownLatestArticleTimestamp", timestamp);
     }
+}
+
+export function addLocallyFavoritedArticle(articleId) {
+    locallyFavoritedArticleIds.add(articleId);
+}
+
+export function removeLocallyFavoritedArticle(articleId) {
+    locallyFavoritedArticleIds.delete(articleId);
+}
+
+export function isLocallyFavorited(articleId) {
+    return locallyFavoritedArticleIds.has(articleId);
 }
 
 console.log("frontend/js/state.js: Module loaded and state initialized.");

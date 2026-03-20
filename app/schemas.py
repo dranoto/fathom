@@ -48,6 +48,7 @@ class NewsPageQuery(BaseModel):
     summary_prompt: Optional[str] = None
     tag_generation_prompt: Optional[str] = None
     favorites_only: bool = False
+    read_state: Optional[str] = "all"  # "all", "unread", or "read"
 
 class ArticleTagResponse(BaseModel):
     id: int
@@ -66,9 +67,12 @@ class ArticleResult(BaseModel):
     source_feed_url: Optional[str] = None
     tags: List[ArticleTagResponse] = []
     is_favorite: bool = False
+    is_read: bool = False
+    is_deleted: bool = False
     error_message: Optional[str] = None
     is_summarizable: bool = False
     word_count: Optional[int] = None
+    has_chat_history: bool = False
     class Config: from_attributes = True
 
 class PaginatedSummariesAPIResponse(BaseModel):

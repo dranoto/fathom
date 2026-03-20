@@ -1,10 +1,9 @@
 /* static_frontend/css/article_card.css */
 
-/* Results Grid */
+/* Results Grid - Pinterest-style masonry */
 .results-grid {
-    display: grid;
-    grid-template-columns: 1fr; 
-    gap: 25px; 
+    column-count: 2;
+    column-gap: 25px;
 }
 
 /* Article Cards */
@@ -17,29 +16,32 @@
     display: flex;
     flex-direction: column;
     transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-    position: relative; /* This is crucial for absolute positioning of children */
+    position: relative;
+    break-inside: avoid;
+    margin-bottom: 25px;
 }
 .article-card:hover {
     transform: translateY(-5px);
     box-shadow: 0 8px 16px rgba(0,0,0,0.1);
 }
 
-/* REMOVED .article-card-actions container styling as icons are positioned individually */
+/* Card Action Buttons Row - all actions in one neat row above title */
+.card-actions-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+}
 
 /* Regenerate Summary Button on Card */
 .regenerate-summary-btn {
-    position: absolute;
-    top: 15px; /* Position from the top of the card */
-    right: 15px; /* Position from the right of the card */
     background-color: #f39c12; 
     color: white;
     border: none;
-    border-radius: 50%; 
-    width: 30px;
-    height: 30px;
+    border-radius: 4px;
+    width: 28px;
+    height: 28px;
     font-size: 16px; 
-    line-height: 30px; 
-    text-align: center;
     cursor: pointer;
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     transition: background-color 0.2s;
@@ -47,7 +49,7 @@
     display: flex; 
     align-items: center;
     justify-content: center;
-    z-index: 2; /* Ensure it's above other elements */
+    flex-shrink: 0;
 }
 .regenerate-summary-btn:hover {
     background-color: #e67e22; 
@@ -56,68 +58,96 @@
     content: "\21BB"; 
 }
 
-/* Direct Link Icon on Card - Positioned below the regenerate button */
+/* Direct Link Icon on Card */
 .direct-link-icon {
-    position: absolute;
-    top: 55px; /* (Initial top 15px + height of regen-btn 30px + 10px gap) */
-    right: 15px; /* Align with the regenerate button's right edge */
     color: #3498db; 
-    font-size: 20px; 
+    font-size: 18px; 
     text-decoration: none;
-    line-height: 1;
     transition: color 0.2s;
-    display: inline-block; 
-    z-index: 2; /* Ensure it's above other elements */
-    /* To horizontally center it under the 30px wide button above:
-       The icon itself is about 20px wide. (30px - 20px) / 2 = 5px offset needed from the right edge's alignment.
-       So, if the regenerate button is 30px wide and at right: 15px, its center is 15px + 15px = 30px from right.
-       The icon is ~20px wide. To center it, its center should also be 30px from right.
-       So its right edge should be 30px - 10px (half icon width) = 20px.
-       This means `right: 20px;` might look more centered if icon is truly 20px.
-       Or, more simply, if the button is 30px wide, and icon is 20px wide, to center the icon
-       under the button, the icon's right edge should be `15px (card edge to button edge) + (30px - 20px)/2 = 15px + 5px = 20px`.
-       Let's try `right: 15px;` first for simple alignment of right edges, then adjust if needed.
-       If both icons should be perfectly centered horizontally relative to each other,
-       and the regenerate button is the reference, and it's 30px wide:
-       The link icon is roughly 20px wide. To make it appear centered under the 30px button,
-       its right edge should be `15px (card's padding) + ( (30px - 20px) / 2 ) = 20px`.
-       Let's adjust right for centering:
-    */
-    right: 20px; /* (15px from card edge + half of (30px button width - 20px icon width)) */
-
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
 }
 .direct-link-icon:hover {
     color: #2980b9; 
 }
-/* Emoji is set via JS: directLinkIcon.innerHTML = "&#128279;"; */
+
+/* Read checkbox button */
+.read-checkbox-btn {
+    background: none;
+    border: 2px solid #bdc3c7;
+    border-radius: 4px;
+    width: 26px;
+    height: 26px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: transparent;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+.read-checkbox-btn:hover {
+    border-color: #27ae60;
+}
+.read-checkbox-btn.is-read {
+    background-color: #27ae60;
+    border-color: #27ae60;
+    color: white;
+}
+.read-checkbox-btn.is-read::after {
+    content: "✓";
+}
+
+/* Delete button */
+.delete-article-btn {
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.delete-article-btn:hover {
+    opacity: 1;
+}
 
 /* Favorite Button on Card */
 .favorite-btn {
-    position: absolute;
-    top: 95px; /* (55px top of link icon + 30px height + 10px gap) */
-    right: 15px;
     background: none;
     border: none;
-    font-size: 24px;
+    font-size: 20px;
     cursor: pointer;
-    padding: 0;
-    color: #ccc; /* Default empty star color */
+    color: #ccc;
     transition: color 0.2s, transform 0.2s;
-    z-index: 2;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 .favorite-btn:hover {
-    transform: scale(1.2);
+    transform: scale(1.15);
 }
 .favorite-btn.is-favorite {
-    color: #f1c40f; /* Filled star color */
+    color: #f1c40f;
 }
-
 
 .article-card h3 { 
     font-size: 1.5em; 
     margin-top: 0; 
     margin-bottom: 10px;
-    padding-right: 50px; /* Keep space for the icons */
     line-height: 1.3; 
 }
 
@@ -240,4 +270,81 @@
 }
 .open-chat-modal-btn:hover {
     background-color: #2980b9;
+}
+.open-chat-modal-btn.has-chat-history {
+    background-color: #2e86de;
+    position: relative;
+}
+.open-chat-modal-btn.has-chat-history::before {
+    content: "";
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background-color: #00ff88;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+.open-chat-modal-btn.has-chat-history:hover {
+    background-color: #1e6bb8;
+}
+
+/* Collapsed read article state */
+.article-card.is-read {
+    opacity: 0.7;
+    min-height: 60px;
+    overflow: hidden;
+}
+.article-card.is-read .summary,
+.article-card.is-read .article-tags-container,
+.article-card.is-read .read-full-article-btn,
+.article-card.is-read .open-chat-modal-btn,
+.article-card.is-read .summarize-ai-btn,
+.article-card.is-read .error-message,
+.article-card.is-read .card-actions-row {
+    display: none !important;
+    visibility: hidden;
+    height: 0;
+    overflow: hidden;
+}
+.article-card.is-read .article-meta-info {
+    display: none !important;
+    visibility: hidden;
+    height: 0;
+    overflow: hidden;
+}
+.article-card.is-read h3 {
+    margin-bottom: 0;
+}
+
+/* Title row for collapsed read articles */
+.article-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+.article-title-row h3 {
+    flex: 1;
+    margin: 0;
+}
+
+/* Collapsed delete button - only visible when read */
+.collapsed-delete-btn {
+    display: none;
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    padding: 4px 8px;
+    flex-shrink: 0;
+}
+.collapsed-delete-btn:hover {
+    opacity: 1;
+}
+.article-card.is-read .collapsed-delete-btn {
+    display: flex;
+    align-items: center;
 }

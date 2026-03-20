@@ -10,7 +10,7 @@ from typing import Any, Optional, List # Added List
 from bs4 import BeautifulSoup
 
 from . import config as app_config 
-from .database import RSSFeedSource, Article 
+from .database import FeedSource, Article 
 from .scraper import scrape_urls # Import the updated scraper function
 from langchain_core.documents import Document as LangchainDocument # For type hinting
 
@@ -100,9 +100,9 @@ def _make_entry_serializable(entry: dict) -> dict:
     return serializable_entry
 
 
-async def fetch_and_store_articles_from_feed(db: Session, feed_source: RSSFeedSource) -> int:
+async def fetch_and_store_articles_from_feed(db: Session, feed_source: FeedSource) -> int:
     """
-    Fetches articles from a single RSSFeedSource, scrapes their content,
+    Fetches articles from a single FeedSource, scrapes their content,
     stores new ones in the database (with text and HTML content),
     and updates the feed_source's last_fetched_at timestamp.
     """
@@ -265,7 +265,7 @@ async def update_all_subscribed_feeds(db: Session):
     now_aware = datetime.now(timezone.utc) 
     
     feeds_to_update = []
-    all_feeds = db.query(RSSFeedSource).all()
+    all_feeds = db.query(FeedSource).all()
     for feed in all_feeds:
         should_fetch = False
         if feed.last_fetched_at is None:
@@ -304,7 +304,7 @@ async def update_all_subscribed_feeds(db: Session):
             try:
                 # Re-fetch the feed_source object in case its state is affected by the rollback,
                 # or if it became detached from the session.
-                feed_to_update_ts = db.query(RSSFeedSource).filter(RSSFeedSource.id == feed_source.id).first()
+                feed_to_update_ts = db.query(FeedSource).filter(FeedSource.id == feed_source.id).first()
                 if feed_to_update_ts:
                     feed_to_update_ts.last_fetched_at = datetime.now(timezone.utc) 
                     db.add(feed_to_update_ts)
@@ -318,15 +318,45 @@ async def update_all_subscribed_feeds(db: Session):
 
     logger.info(f"RSS_CLIENT_SCHEDULER: Finished feed update cycle. Total new articles committed across all feeds: {total_new_articles_overall}.")
 
+def update_single_feed(db: Session, feed_id: int):
+    """
+    Updates a single feed by its ID, regardless of whether it's due for update.
+    Used for manual refresh of a specific feed.
+    """
+    logger.info(f"RSS_CLIENT: Updating single feed with ID: {feed_id}")
+    feed_source = db.query(FeedSource).filter(FeedSource.id == feed_id).first()
+    if not feed_source:
+        logger.warning(f"RSS_CLIENT: Feed with ID {feed_id} not found.")
+        return
+    
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        newly_added = loop.run_until_complete(fetch_and_store_articles_from_feed(db, feed_source))
+        db.commit()
+        logger.info(f"RSS_CLIENT: Successfully processed single feed '{feed_source.name}'. Added {newly_added} articles.")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"RSS_CLIENT: Error processing single feed {feed_source.url}: {e}", exc_info=True)
+        try:
+            feed_source.last_fetched_at = datetime.now(timezone.utc)
+            db.add(feed_source)
+            db.commit()
+        except Exception:
+            db.rollback()
+    finally:
+        loop.close()
+
 def add_initial_feeds_to_db(db: Session, feed_urls: list[str]):
     logger.info(f"RSS_CLIENT: Attempting to add/verify initial feeds: {feed_urls}")
     added_count = 0
     for url in feed_urls:
-        existing_feed = db.query(RSSFeedSource).filter(RSSFeedSource.url == url).first()
+        existing_feed = db.query(FeedSource).filter(FeedSource.url == url).first()
         if not existing_feed:
             try:
                 feed_name_guess = url.split('/')[2].replace("www.", "") if len(url.split('/')) > 2 else url
-                new_feed = RSSFeedSource(
+                new_feed = FeedSource(
                     url=url, 
                     name=feed_name_guess, 
                     fetch_interval_minutes=app_config.DEFAULT_RSS_FETCH_INTERVAL_MINUTES 
@@ -345,3 +375,40 @@ def add_initial_feeds_to_db(db: Session, feed_urls: list[str]):
         logger.info(f"RSS_CLIENT: Added {added_count} new feed sources to the database.")
     else:
         logger.info("RSS_CLIENT: No new feed sources added (all provided URLs likely exist or list was empty).")
+
+def update_single_user_feed(db: Session, subscription_id: int, user_id: int):
+    """
+    Updates a single user's feed subscription by triggering a fetch of the associated FeedSource.
+    """
+    from .database import UserFeedSubscription
+    
+    logger.info(f"RSS_CLIENT: Updating user subscription with ID: {subscription_id}, user: {user_id}")
+    subscription = db.query(UserFeedSubscription).filter(
+        UserFeedSubscription.id == subscription_id, 
+        UserFeedSubscription.user_id == user_id
+    ).first()
+    if not subscription:
+        logger.warning(f"RSS_CLIENT: User subscription with ID {subscription_id} not found for user {user_id}.")
+        return
+    
+    feed_source = db.query(FeedSource).filter(FeedSource.id == subscription.feed_source_id).first()
+    if not feed_source:
+        logger.warning(f"RSS_CLIENT: FeedSource with ID {subscription.feed_source_id} not found.")
+        return
+    
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        async def fetch_with_feed_source():
+            return await fetch_and_store_articles_from_feed(db, feed_source)
+        
+        newly_added = loop.run_until_complete(fetch_with_feed_source())
+        db.commit()
+        
+        logger.info(f"RSS_CLIENT: Successfully processed feed '{feed_source.url}'. Added {newly_added} articles.")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"RSS_CLIENT: Error processing feed {feed_source.url}: {e}", exc_info=True)
+    finally:
+        loop.close()

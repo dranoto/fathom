@@ -1,11 +1,11 @@
 # app/dependencies.py
 import logging
 from fastapi import Request, HTTPException
-from langchain_google_genai import GoogleGenerativeAI # For type hinting
+from langchain_openai import ChatOpenAI
 
 logger = logging.getLogger(__name__)
 
-def get_llm_summary(request: Request) -> GoogleGenerativeAI:
+def get_llm_summary(request: Request) -> ChatOpenAI:
     """
     Dependency function to get the initialized summarization LLM instance
     from the application state (request.app.state).
@@ -16,7 +16,7 @@ def get_llm_summary(request: Request) -> GoogleGenerativeAI:
         raise HTTPException(status_code=503, detail="Summarization LLM has not been initialized.")
     return request.app.state.llm_summary_instance
 
-def get_llm_chat(request: Request) -> GoogleGenerativeAI:
+def get_llm_chat(request: Request) -> ChatOpenAI:
     """
     Dependency function to get the initialized chat LLM instance
     from the application state (request.app.state).
@@ -27,7 +27,7 @@ def get_llm_chat(request: Request) -> GoogleGenerativeAI:
         raise HTTPException(status_code=503, detail="Chat LLM has not been initialized.")
     return request.app.state.llm_chat_instance
 
-def get_llm_tag(request: Request) -> GoogleGenerativeAI:
+def get_llm_tag(request: Request) -> ChatOpenAI:
     """
     Dependency function to get the initialized tag generation LLM instance
     from the application state (request.app.state).

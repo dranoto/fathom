@@ -1,5 +1,6 @@
 # app/routers/config_routes.py
 import logging
+import httpx
 from fastapi import APIRouter, Depends, Request, HTTPException
 from sqlalchemy.orm import Session as SQLAlchemySession
 from typing import List, Dict, Any
@@ -14,6 +15,7 @@ from ..schemas import (
     UpdateAppSettingsResponse,
     AppSettings
 )
+from .auth_routes import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,7 @@ router = APIRouter(
 @router.get("/initial-config", response_model=InitialConfigResponse)
 async def get_initial_config_endpoint(
     request: Request,
+    current_user: database.User = Depends(get_current_user),
     main_db: SQLAlchemySession = Depends(database.get_db),
     settings_db: SQLAlchemySession = Depends(settings_database.get_db)
 ):
@@ -35,7 +38,7 @@ async def get_initial_config_endpoint(
     logger.info("API Call: Fetching initial configuration.")
 
     # 1. Fetch all feed sources from the main database
-    db_feeds = main_db.query(database.RSSFeedSource).order_by(database.RSSFeedSource.name).all()
+    db_feeds = main_db.query(database.FeedSource).order_by(database.FeedSource.name).all()
     db_feed_sources_response: List[Dict[str, Any]] = [
         {"id": feed.id, "url": feed.url, "name": feed.name, "fetch_interval_minutes": feed.fetch_interval_minutes}
         for feed in db_feeds
@@ -61,7 +64,7 @@ async def get_initial_config_endpoint(
     try:
         minimum_word_count = int(all_settings.get("minimum_word_count"))
     except (ValueError, TypeError):
-        minimum_word_count = 100  # Fallback default
+        minimum_word_count = app_config.DEFAULT_MINIMUM_WORD_COUNT
         logger.warning(f"Invalid 'minimum_word_count' value in settings DB. Falling back to default: {minimum_word_count}")
 
     app_settings = AppSettings(
@@ -92,6 +95,7 @@ async def get_initial_config_endpoint(
 async def update_app_settings_endpoint(
     request: Request,
     config_update: UpdateAppSettingsRequest,
+    current_user: database.User = Depends(get_current_user),
     settings_db: SQLAlchemySession = Depends(settings_database.get_db)
 ):
     """
@@ -112,29 +116,42 @@ async def update_app_settings_endpoint(
         app = request.app
         updated_settings = config_update.settings
 
+        def override_gemini_models(model_name: str, default_name: str) -> str:
+            if model_name and "gemini" in model_name.lower():
+                logger.warning(f"CONFIG_ROUTES: Model '{model_name}' contains 'gemini' which is no longer supported. Using default: {default_name}")
+                return default_name
+            return model_name
+
+        summary_model = override_gemini_models(updated_settings.summary_model_name, app_config.DEFAULT_SUMMARY_MODEL_NAME)
+        chat_model = override_gemini_models(updated_settings.chat_model_name, app_config.DEFAULT_CHAT_MODEL_NAME)
+        tag_model = override_gemini_models(updated_settings.tag_model_name, app_config.DEFAULT_TAG_MODEL_NAME)
+
         # Initialize Summary LLM
         summary_llm = summarizer.initialize_llm(
-            api_key=app_config.GEMINI_API_KEY,
-            model_name=updated_settings.summary_model_name,
-            temperature=0.2, max_output_tokens=app_config.SUMMARY_MAX_OUTPUT_TOKENS
+            api_key=app_config.OPENAI_API_KEY,
+            base_url=app_config.OPENAI_BASE_URL,
+            model_name=summary_model,
+            temperature=app_config.SUMMARY_LLM_TEMPERATURE, max_tokens=app_config.SUMMARY_MAX_OUTPUT_TOKENS
         )
         if summary_llm:
             app.state.llm_summary_instance = summary_llm
 
         # Initialize Chat LLM
         chat_llm = summarizer.initialize_llm(
-            api_key=app_config.GEMINI_API_KEY,
-            model_name=updated_settings.chat_model_name,
-            temperature=0.5, max_output_tokens=app_config.CHAT_MAX_OUTPUT_TOKENS
+            api_key=app_config.OPENAI_API_KEY,
+            base_url=app_config.OPENAI_BASE_URL,
+            model_name=chat_model,
+            temperature=app_config.CHAT_LLM_TEMPERATURE, max_tokens=app_config.CHAT_MAX_OUTPUT_TOKENS
         )
         if chat_llm:
             app.state.llm_chat_instance = chat_llm
 
         # Initialize Tag LLM
         tag_llm = summarizer.initialize_llm(
-            api_key=app_config.GEMINI_API_KEY,
-            model_name=updated_settings.tag_model_name,
-            temperature=0.1, max_output_tokens=app_config.TAG_MAX_OUTPUT_TOKENS
+            api_key=app_config.OPENAI_API_KEY,
+            base_url=app_config.OPENAI_BASE_URL,
+            model_name=tag_model,
+            temperature=app_config.TAG_LLM_TEMPERATURE, max_tokens=app_config.TAG_MAX_OUTPUT_TOKENS
         )
         if tag_llm:
             app.state.llm_tag_instance = tag_llm
@@ -150,3 +167,36 @@ async def update_app_settings_endpoint(
     except Exception as e:
         logger.error(f"Error updating application settings: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to update settings: {e}")
+
+@router.post("/config/refresh-models")
+async def refresh_available_models_endpoint(
+    request: Request,
+    current_user: database.User = Depends(get_current_user),
+    settings_db: SQLAlchemySession = Depends(settings_database.get_db)
+):
+    """Fetches available models from OpenAI API and updates cache."""
+    logger.info("API Call: Refreshing available models from OpenAI API.")
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{app_config.OPENAI_BASE_URL}/v1/models",
+                headers={"Authorization": f"Bearer {app_config.OPENAI_API_KEY}"},
+                timeout=10.0
+            )
+        if response.status_code == 200:
+            models_data = response.json()
+            available = [m["id"] for m in models_data.get("data", [])]
+            with settings_database.db_session_scope() as db:
+                settings_database.set_cached_models(db, available)
+            request.app.state.available_models = available
+            logger.info(f"CONFIG_ROUTES: Refreshed {len(available)} available models from API.")
+            return {"message": "Models refreshed successfully", "models": available}
+        else:
+            logger.error(f"CONFIG_ROUTES: Failed to fetch models from API: {response.status_code}")
+            raise HTTPException(status_code=response.status_code, detail="Failed to fetch models from API")
+    except httpx.RequestError as e:
+        logger.error(f"CONFIG_ROUTES: Request error while fetching models: {e}")
+        raise HTTPException(status_code=500, detail=f"Request error: {str(e)}")
+    except Exception as e:
+        logger.error(f"CONFIG_ROUTES: Error refreshing models: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

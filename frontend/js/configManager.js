@@ -15,7 +15,8 @@ let numArticlesSetupInput, currentNumArticlesDisplay,
     chatPromptInput, currentChatPromptDisplay,
     rssFetchIntervalInput, currentRssFetchIntervalDisplay,
     contentPrefsForm, aiPromptsForm, globalRssSettingsForm, resetPromptsBtn,
-    aiModelsForm, summaryModelSelect, chatModelSelect, tagModelSelect;
+    aiModelsForm, summaryModelSelect, chatModelSelect, tagModelSelect,
+    refreshModelsBtn;
 
 /**
  * Initializes the configuration manager by fetching DOM elements.
@@ -43,6 +44,7 @@ export function initializeDOMReferences() {
     summaryModelSelect = document.getElementById('summary-model-select');
     chatModelSelect = document.getElementById('chat-model-select');
     tagModelSelect = document.getElementById('tag-model-select');
+    refreshModelsBtn = document.getElementById('refresh-models-btn');
 
     console.log("ConfigManager: DOM references initialized.");
 }
@@ -262,6 +264,25 @@ export function resetAiPromptsToDefaults() {
 }
 
 /**
+ * Refreshes the available models list from the backend.
+ */
+export async function refreshAvailableModels() {
+    console.log("ConfigManager: Refreshing available models...");
+    try {
+        const response = await apiService.refreshAvailableModels();
+        if (response.models) {
+            state.setAvailableModels(response.models);
+            populateModelDropdowns();
+            console.log(`ConfigManager: Refreshed ${response.models.length} available models.`);
+            alert('Models refreshed successfully!');
+        }
+    } catch (error) {
+        console.error('ConfigManager: Failed to refresh models:', error);
+        alert('Error refreshing models. Please check the console for details.');
+    }
+}
+
+/**
  * Saves the global RSS fetch interval preference.
  */
 export function saveGlobalRssFetchInterval(interval) {
@@ -300,6 +321,9 @@ export function setupFormEventListeners(callbacks = {}) {
         e.preventDefault();
         saveAiModels(summaryModelSelect.value, chatModelSelect.value, tagModelSelect.value);
     });
+    if (refreshModelsBtn) {
+        refreshModelsBtn.addEventListener('click', refreshAvailableModels);
+    }
     console.log("ConfigManager: Setup form event listeners attached.");
 }
 

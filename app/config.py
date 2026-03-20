@@ -13,10 +13,11 @@ DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///./{SQLITE_DB_SUBDIR}/{SQLIT
 SETTINGS_DATABASE_URL = os.getenv("SETTINGS_DATABASE_URL", f"sqlite:///./{SQLITE_DB_SUBDIR}/{SETTINGS_DB_FILE}")
 
 # --- LLM Configuration ---
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-DEFAULT_SUMMARY_MODEL_NAME = os.getenv("DEFAULT_SUMMARY_MODEL_NAME", "gemini-1.5-flash-latest")
-DEFAULT_CHAT_MODEL_NAME = os.getenv("DEFAULT_CHAT_MODEL_NAME", "gemini-1.5-flash-latest")
-DEFAULT_TAG_MODEL_NAME = os.getenv("DEFAULT_TAG_MODEL_NAME", "gemini-1.5-flash-latest")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+DEFAULT_SUMMARY_MODEL_NAME = os.getenv("DEFAULT_SUMMARY_MODEL_NAME", "gpt-4o-mini")
+DEFAULT_CHAT_MODEL_NAME = os.getenv("DEFAULT_CHAT_MODEL_NAME", "gpt-4o-mini")
+DEFAULT_TAG_MODEL_NAME = os.getenv("DEFAULT_TAG_MODEL_NAME", "gpt-4o-mini")
 
 # Max output tokens for different LLM tasks
 SUMMARY_MAX_OUTPUT_TOKENS = int(os.getenv("SUMMARY_MAX_OUTPUT_TOKENS", 1024))
@@ -60,17 +61,44 @@ except ValueError:
 
 
 # --- Scraper Configuration ---
-SITES_REQUIRING_PLAYWRIGHT: list[str] = ["wsj.com", "ft.com"] # This might be less relevant if all scraping uses Playwright
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-REQUEST_TIMEOUT = 10 # For non-Playwright requests, if any remain
+USER_AGENT = os.getenv("PLAYWRIGHT_USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT", "10"))
 
 # --- Playwright specific settings ---
-PLAYWRIGHT_TIMEOUT = 60000 # Increased from 20000 to match Colab's page.goto timeout
+PLAYWRIGHT_TIMEOUT = int(os.getenv("PLAYWRIGHT_TIMEOUT", "60000"))
+PLAYWRIGHT_PAGE_WAIT_MS = int(os.getenv("PLAYWRIGHT_PAGE_WAIT_MS", "3000"))
+SCRAPE_REQUEST_DELAY_SEC = int(os.getenv("SCRAPE_REQUEST_DELAY_SEC", "1"))
 
-# Path to the browser extension directory (relative to the app's root in Docker, e.g., /app/scraper_assistant)
-PATH_TO_EXTENSION = os.getenv("PATH_TO_EXTENSION", "/app/scraper_assistant")
+# Path to the browser extension directory
+# Auto-detect: Docker (/app/scraper_assistant) if exists, otherwise local project root
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_docker_extension_path = "/app/scraper_assistant"
+_local_extension_path = os.path.join(PROJECT_ROOT, "scraper_assistant")
+
+if os.getenv("PATH_TO_EXTENSION"):
+    PATH_TO_EXTENSION = os.getenv("PATH_TO_EXTENSION")
+elif os.path.isdir(_docker_extension_path):
+    PATH_TO_EXTENSION = _docker_extension_path
+else:
+    PATH_TO_EXTENSION = _local_extension_path
 # Whether to run the Playwright browser in headless mode
 USE_HEADLESS_BROWSER = os.getenv("USE_HEADLESS_BROWSER", "True").lower() in ('true', '1', 't')
+
+# --- Content Threshold ---
+DEFAULT_MINIMUM_WORD_COUNT = int(os.getenv("DEFAULT_MINIMUM_WORD_COUNT", "100"))
+
+# --- LLM Temperature Configuration ---
+SUMMARY_LLM_TEMPERATURE = float(os.getenv("SUMMARY_LLM_TEMPERATURE", "0.2"))
+CHAT_LLM_TEMPERATURE = float(os.getenv("CHAT_LLM_TEMPERATURE", "0.5"))
+TAG_LLM_TEMPERATURE = float(os.getenv("TAG_LLM_TEMPERATURE", "0.1"))
+
+# --- Debug Configuration ---
+# Options: minimal, standard, verbose, trace
+DEBUG_LEVEL = os.getenv("DEBUG_LEVEL", "standard").lower()
+DEBUG_LEVELS = {"minimal": 0, "standard": 1, "verbose": 2, "trace": 3}
+
+def is_debug_level(level_name: str) -> bool:
+    return DEBUG_LEVELS.get(DEBUG_LEVEL, 1) >= DEBUG_LEVELS.get(level_name, 0)
 
 
 # --- Default AI Prompts ---
@@ -134,25 +162,36 @@ Article:
 Tags:""")
 
 
-if not GEMINI_API_KEY:
-    print("WARNING: GEMINI_API_KEY environment variable is not set. LLM features will be impaired.")
+if not OPENAI_API_KEY:
+    print("WARNING: OPENAI_API_KEY environment variable is not set. LLM features will be impaired.")
 
 print(f"CONFIG LOADED: DATABASE_URL: {DATABASE_URL}")
-print(f"CONFIG LOADED: GEMINI_API_KEY Set: {'Yes' if GEMINI_API_KEY else 'NO'}")
+print(f"CONFIG LOADED: OPENAI_API_KEY Set: {'Yes' if OPENAI_API_KEY else 'NO'}")
+print(f"CONFIG LOADED: OPENAI_BASE_URL: {OPENAI_BASE_URL}")
 print(f"CONFIG LOADED: DEFAULT_SUMMARY_MODEL_NAME: {DEFAULT_SUMMARY_MODEL_NAME}")
 print(f"CONFIG LOADED: DEFAULT_CHAT_MODEL_NAME: {DEFAULT_CHAT_MODEL_NAME}")
 print(f"CONFIG LOADED: DEFAULT_TAG_MODEL_NAME: {DEFAULT_TAG_MODEL_NAME}")
 print(f"CONFIG LOADED: SUMMARY_MAX_OUTPUT_TOKENS: {SUMMARY_MAX_OUTPUT_TOKENS}")
 print(f"CONFIG LOADED: CHAT_MAX_OUTPUT_TOKENS: {CHAT_MAX_OUTPUT_TOKENS}")
 print(f"CONFIG LOADED: TAG_MAX_OUTPUT_TOKENS: {TAG_MAX_OUTPUT_TOKENS}")
+print(f"CONFIG LOADED: SUMMARY_LLM_TEMPERATURE: {SUMMARY_LLM_TEMPERATURE}")
+print(f"CONFIG LOADED: CHAT_LLM_TEMPERATURE: {CHAT_LLM_TEMPERATURE}")
+print(f"CONFIG LOADED: TAG_LLM_TEMPERATURE: {TAG_LLM_TEMPERATURE}")
 print(f"CONFIG LOADED: RSS_FEED_URLS from ENV: {RSS_FEED_URLS}")
 print(f"CONFIG LOADED: DEFAULT_PAGE_SIZE: {DEFAULT_PAGE_SIZE}")
 print(f"CONFIG LOADED: MAX_ARTICLES_PER_INDIVIDUAL_FEED: {MAX_ARTICLES_PER_INDIVIDUAL_FEED}")
 print(f"CONFIG LOADED: DEFAULT_RSS_FETCH_INTERVAL_MINUTES: {DEFAULT_RSS_FETCH_INTERVAL_MINUTES}")
+print(f"CONFIG LOADED: DEFAULT_MINIMUM_WORD_COUNT: {DEFAULT_MINIMUM_WORD_COUNT}")
 print(f"CONFIG LOADED: PLAYWRIGHT_TIMEOUT: {PLAYWRIGHT_TIMEOUT}")
+print(f"CONFIG LOADED: PLAYWRIGHT_PAGE_WAIT_MS: {PLAYWRIGHT_PAGE_WAIT_MS}")
+print(f"CONFIG LOADED: SCRAPE_REQUEST_DELAY_SEC: {SCRAPE_REQUEST_DELAY_SEC}")
+print(f"CONFIG LOADED: REQUEST_TIMEOUT: {REQUEST_TIMEOUT}")
+print(f"CONFIG LOADED: USER_AGENT: {USER_AGENT[:50]}...")
 print(f"CONFIG LOADED: PATH_TO_EXTENSION: {PATH_TO_EXTENSION}")
+print(f"CONFIG LOADED: PROJECT_ROOT: {PROJECT_ROOT}")
 print(f"CONFIG LOADED: USE_HEADLESS_BROWSER: {USE_HEADLESS_BROWSER}")
 print(f"CONFIG LOADED: DEFAULT_SUMMARY_PROMPT (first 100 chars): {DEFAULT_SUMMARY_PROMPT[:100]}...")
 print(f"CONFIG LOADED: DEFAULT_CHAT_PROMPT (first 100 chars): {DEFAULT_CHAT_PROMPT[:100]}...")
 print(f"CONFIG LOADED: CHAT_NO_ARTICLE_PROMPT (first 100 chars): {CHAT_NO_ARTICLE_PROMPT[:100]}...")
 print(f"CONFIG LOADED: DEFAULT_TAG_GENERATION_PROMPT (first 100 chars): {DEFAULT_TAG_GENERATION_PROMPT[:100]}...")
+print(f"CONFIG LOADED: DEBUG_LEVEL: {DEBUG_LEVEL}")

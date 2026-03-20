@@ -1,7 +1,9 @@
 // frontend/js/apiService.js
-// apiService.js
-let SUMMARIES_API_ENDPOINT = '/api/articles/summaries'; // Default value
-let CHAT_API_ENDPOINT_BASE = '/api'; // Default value
+let SUMMARIES_API_ENDPOINT = '/api/articles/summaries';
+let CHAT_API_ENDPOINT_BASE = '/api';
+
+const AUTH_TOKEN_KEY = 'auth_token';
+const USER_DATA_KEY = 'user_data';
 
 export function setApiEndpoints(summariesEndpoint, chatBaseEndpoint) {
     if (summariesEndpoint) SUMMARIES_API_ENDPOINT = summariesEndpoint;
@@ -9,16 +11,67 @@ export function setApiEndpoints(summariesEndpoint, chatBaseEndpoint) {
     console.log(`API Service Endpoints Updated: SUMMARIES -> ${SUMMARIES_API_ENDPOINT}, CHAT_BASE -> ${CHAT_API_ENDPOINT_BASE}`);
 }
 
-/**
- * This module centralizes all API communication for the NewsAI frontend.
- * Each function corresponds to an API endpoint on the backend.
- * It handles making the fetch request and basic error checking.
- */
+function getAuthToken() {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+function setAuthToken(token) {
+    if (token) {
+        localStorage.setItem(AUTH_TOKEN_KEY, token);
+    } else {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+    }
+}
+
+function setUserData(userData) {
+    if (userData) {
+        localStorage.setItem(USER_DATA_KEY, JSON.stringify(userData));
+    } else {
+        localStorage.removeItem(USER_DATA_KEY);
+    }
+}
+
+export function getUserData() {
+    const data = localStorage.getItem(USER_DATA_KEY);
+    return data ? JSON.parse(data) : null;
+}
+
+export function isLoggedIn() {
+    return !!getAuthToken();
+}
 
 async function handleFetch(url, options = {}) {
+    const token = getAuthToken();
+    const headers = {
+        ...options.headers
+    };
+    
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    if (!(options.body instanceof FormData) && headers['Content-Type'] !== 'multipart/form-data') {
+        if (!headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+        }
+    }
+    
+    const finalOptions = {
+        ...options,
+        headers
+    };
+    
     console.log(`API Service: Fetching ${url} with options:`, options.method || 'GET', options.body ? 'with body' : 'no body');
     try {
-        const response = await fetch(url, options);
+        const response = await fetch(url, finalOptions);
+        
+        if (response.status === 401) {
+            setAuthToken(null);
+            setUserData(null);
+            window.dispatchEvent(new CustomEvent('auth:logout'));
+            throw new Error('Unauthorized - please log in again');
+        }
+        
         if (!response.ok) {
             let errorDetail = `HTTP error! status: ${response.status}`;
             try {
@@ -30,15 +83,57 @@ async function handleFetch(url, options = {}) {
             console.error(`API Service: Fetch error for ${url} - ${errorDetail}`);
             throw new Error(errorDetail);
         }
-        if (response.status === 204) { 
+        if (response.status === 204) {
             console.log(`API Service: Received 204 No Content for ${url}`);
-            return null; 
+            return null;
         }
         return response.json();
     } catch (error) {
         console.error(`API Service: Network or unexpected error for ${url}: ${error.message}`, error);
         throw error;
     }
+}
+
+export async function login(email, password) {
+    const response = await handleFetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+    });
+    setAuthToken(response.access_token);
+    setUserData({ id: response.user_id, email: response.email, is_admin: response.is_admin || false });
+    return response;
+}
+
+export async function register(email, password) {
+    const response = await handleFetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+    });
+    setAuthToken(response.access_token);
+    setUserData({ id: response.user_id, email: response.email, is_admin: response.is_admin || false });
+    return response;
+}
+
+export async function logout() {
+    setAuthToken(null);
+    setUserData(null);
+}
+
+export async function getCurrentUser() {
+    return handleFetch('/api/auth/me');
+}
+
+export async function deleteAccount(confirm) {
+    const response = await handleFetch('/api/auth/delete-account', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm })
+    });
+    setAuthToken(null);
+    setUserData(null);
+    return response;
 }
 
 export async function fetchInitialConfigData() {
@@ -50,6 +145,13 @@ export async function updateConfig(payload) {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
+    });
+}
+
+export async function refreshAvailableModels() {
+    return handleFetch('/api/config/refresh-models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
     });
 }
 
@@ -65,6 +167,46 @@ export async function fetchNewsSummaries(payload) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
+    });
+}
+
+export async function fetchPublicFeeds() {
+    return handleFetch('/api/feeds/public');
+}
+
+export async function fetchUserFeeds() {
+    return handleFetch('/api/users/feeds');
+}
+
+export async function addUserFeed(feedData) {
+    return handleFetch('/api/users/feeds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(feedData)
+    });
+}
+
+export async function deleteUserFeed(feedId) {
+    return handleFetch(`/api/users/feeds/${feedId}`, {
+        method: 'DELETE'
+    });
+}
+
+export async function triggerUserFeedFetch(feedId) {
+    return handleFetch(`/api/users/feeds/${feedId}/trigger-fetch`, {
+        method: 'POST'
+    });
+}
+
+export async function fetchUserSettings() {
+    return handleFetch('/api/users/settings');
+}
+
+export async function updateUserSettings(settings) {
+    return handleFetch('/api/users/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
     });
 }
 
@@ -100,6 +242,12 @@ export async function triggerRssRefresh() {
     });
 }
 
+export async function refreshSingleFeed(feedId) {
+    return handleFetch(`/api/feeds/${feedId}/refresh`, {
+        method: 'POST'
+    });
+}
+
 export async function fetchRefreshStatus() {
     return handleFetch('/api/feeds/refresh-status');
 }
@@ -113,13 +261,10 @@ export async function regenerateSummary(articleId, payload) {
 }
 
 export async function fetchChatHistory(articleId) {
-    // CORRECTED PATH: Removed the extra "s" from "articles"
-    // The endpoint is in chat_routes.py with prefix "/api" and route "/article/{id}/chat-history"
     return handleFetch(`${CHAT_API_ENDPOINT_BASE}/article/${articleId}/chat-history`); 
 }
 
 export async function postChatMessage(payload) {
-    // chat_routes.py has prefix="/api" and endpoint "/chat-with-article"
     return handleFetch(`${CHAT_API_ENDPOINT_BASE}/chat-with-article`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -143,6 +288,108 @@ export async function checkNewArticles(sinceTimestamp) {
         url += `?since_timestamp=${encodeURIComponent(sinceTimestamp)}`;
     }
     return handleFetch(url);
+}
+
+export async function markArticleRead(articleId) {
+    return handleFetch(`${CHAT_API_ENDPOINT_BASE}/articles/${articleId}/mark-read`, {
+        method: 'POST'
+    });
+}
+
+export async function markArticleUnread(articleId) {
+    return handleFetch(`${CHAT_API_ENDPOINT_BASE}/articles/${articleId}/mark-unread`, {
+        method: 'POST'
+    });
+}
+
+export async function deleteArticle(articleId) {
+    return handleFetch(`${CHAT_API_ENDPOINT_BASE}/articles/${articleId}/delete`, {
+        method: 'POST'
+    });
+}
+
+export async function restoreArticle(articleId) {
+    return handleFetch(`${CHAT_API_ENDPOINT_BASE}/articles/${articleId}/restore`, {
+        method: 'POST'
+    });
+}
+
+export async function permanentlyDeleteArticle(articleId) {
+    return handleFetch(`${CHAT_API_ENDPOINT_BASE}/articles/${articleId}/permanent-delete`, {
+        method: 'POST'
+    });
+}
+
+export async function bulkMarkRead(articleIds) {
+    return handleFetch(`${CHAT_API_ENDPOINT_BASE}/articles/bulk-mark-read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(articleIds)
+    });
+}
+
+export async function fetchDeletedArticles() {
+    return handleFetch(`${CHAT_API_ENDPOINT_BASE}/articles/deleted`);
+}
+
+export async function fetchDebugStatus() {
+    return handleFetch('/api/debug/status');
+}
+
+export async function testScrapeUrl(url) {
+    return handleFetch(`/api/debug/test-scrape?url=${encodeURIComponent(url)}`, {
+        method: 'POST'
+    });
+}
+
+export async function fetchScrapeHistory(limit = 20) {
+    return handleFetch(`/api/debug/scrape-history?limit=${limit}`);
+}
+
+export async function clearScrapeHistory() {
+    return handleFetch('/api/debug/clear-history', {
+        method: 'POST'
+    });
+}
+
+export async function getAdminUsers() {
+    return handleFetch('/api/admin/users');
+}
+
+export async function deleteAdminUser(userId) {
+    return handleFetch(`/api/admin/users/${userId}`, {
+        method: 'DELETE'
+    });
+}
+
+export async function getAdminFeeds() {
+    return handleFetch('/api/admin/feeds');
+}
+
+export async function addAdminFeed(feedData) {
+    return handleFetch('/api/admin/feeds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(feedData)
+    });
+}
+
+export async function deleteAdminFeed(feedId) {
+    return handleFetch(`/api/admin/feeds/${feedId}`, {
+        method: 'DELETE'
+    });
+}
+
+export async function getAdminSettings() {
+    return handleFetch('/api/admin/settings/global');
+}
+
+export async function updateAdminSettings(settingsData) {
+    return handleFetch('/api/admin/settings/global', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settingsData)
+    });
 }
 
 console.log("frontend/js/apiService.js: Module loaded.");
