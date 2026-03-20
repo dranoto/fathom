@@ -167,6 +167,20 @@ def create_db_and_tables():
                                 print(f"DATABASE: Could not migrate article state for article {art_id}: {e}")
                         print(f"DATABASE: Migrated {len(articles)} article states to user_article_states for migration user")
 
+                if inspector.has_table("articles") and inspector.has_table("feed_sources"):
+                    result = connection.execute(text("""
+                        SELECT COUNT(*) FROM articles 
+                        WHERE feed_source_id NOT IN (SELECT id FROM feed_sources)
+                    """)).fetchone()
+                    orphaned_count = result[0] if result else 0
+                    if orphaned_count > 0:
+                        connection.execute(text("""
+                            UPDATE articles 
+                            SET feed_source_id = (SELECT id FROM feed_sources ORDER BY id LIMIT 1)
+                            WHERE feed_source_id NOT IN (SELECT id FROM feed_sources)
+                        """))
+                        print(f"DATABASE: Fixed {orphaned_count} articles with orphaned feed_source_id references")
+
         print("DATABASE: Migration completed successfully.")
 
     except Exception as e:
