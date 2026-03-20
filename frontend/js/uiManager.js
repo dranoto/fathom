@@ -442,7 +442,11 @@ export function populateFeedFilterDropdown() {
 
     feedFilterSelect.innerHTML = '<option value="">Select a feed...</option>';
     
+    const userFeedSourceIds = new Set(state.userFeeds?.map(uf => uf.feed_source_id) || []);
+    
     state.dbFeedSources.forEach(feed => {
+        if (!userFeedSourceIds.has(feed.id)) return;
+        
         const option = document.createElement('option');
         option.value = feed.id.toString();
         const userFeed = state.userFeeds?.find(uf => uf.feed_source_id === feed.id);
