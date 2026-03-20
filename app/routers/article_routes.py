@@ -783,22 +783,30 @@ async def get_deleted_articles(
     if not deleted_article_ids:
         return []
     
-    articles = db.query(database.Article).filter(
-        database.Article.id.in_(deleted_article_ids),
-        database.Article.feed_source_id.in_(feed_source_id_set)
-    ).all()
-    
-    results = []
-    for article in articles:
-        state = next((s for s in deleted_states if s.article_id == article.id), None)
-        results.append({
-            "id": article.id,
-            "title": article.title,
-            "url": article.url,
-            "publisher": article.feed_source.name if article.feed_source else article.publisher_name,
-            "deleted_at": state.deleted_at.isoformat() if state and state.deleted_at else None,
-            "created_at": article.created_at.isoformat() if article.created_at else None,
-        })
-    
-    results.sort(key=lambda x: x.get("deleted_at", ""), reverse=True)
-    return results
+    try:
+        articles = db.query(database.Article).filter(
+            database.Article.id.in_(deleted_article_ids),
+            database.Article.feed_source_id.in_(feed_source_id_set)
+        ).all()
+        
+        results = []
+        for article in articles:
+            state = next((s for s in deleted_states if s.article_id == article.id), None)
+            try:
+                publisher = article.feed_source.name if article.feed_source else article.publisher_name
+            except Exception:
+                publisher = article.publisher_name or "Unknown"
+            results.append({
+                "id": article.id,
+                "title": article.title,
+                "url": article.url,
+                "publisher": publisher,
+                "deleted_at": state.deleted_at.isoformat() if state and state.deleted_at else None,
+                "created_at": article.created_at.isoformat() if article.created_at else None,
+            })
+        
+        results.sort(key=lambda x: x.get("deleted_at", ""), reverse=True)
+        return results
+    except Exception as e:
+        logger.error(f"Error fetching deleted articles: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error fetching deleted articles")
