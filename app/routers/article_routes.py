@@ -112,11 +112,44 @@ async def get_news_summaries_endpoint(
         search_source_display_parts.append(f"Tags: {', '.join(tag_names) or 'Selected Tags'}")
     
     if query.keyword:
-        keyword_like = f"%{query.keyword}%"
-        db_query = db_query.filter(or_(
-            database.Article.title.ilike(keyword_like),
-            database.Article.scraped_text_content.ilike(keyword_like)
-        ))
+        keyword = query.keyword
+        keyword_len = len(keyword)
+        
+        def make_word_boundary_filter(column):
+            if keyword_len < 4:
+                return or_(
+                    column.ilike(f"% {keyword} %"),
+                    column.ilike(f"% {keyword}"),
+                    column.ilike(f"{keyword} %"),
+                    column.ilike(f"%{keyword}/%"),
+                    column.ilike(f"%{keyword}-%"),
+                    column.ilike(f"%{keyword}:%"),
+                    column.ilike(f"%{keyword})%"),
+                )
+            elif keyword_len < 6:
+                return or_(
+                    column.ilike(f"% {keyword} %"),
+                    column.ilike(f"% {keyword}"),
+                    column.ilike(f"{keyword} %"),
+                    column.ilike(f" %{keyword}.%"),
+                    column.ilike(f"%{keyword}/%"),
+                )
+            return or_(
+                column.ilike(f"% {keyword} %"),
+                column.ilike(f"% {keyword}"),
+                column.ilike(f"{keyword} %"),
+                column.ilike(f" %{keyword}.%"),
+            )
+        
+        if keyword_len < 4:
+            db_query = db_query.filter(
+                make_word_boundary_filter(database.Article.title)
+            )
+        else:
+            db_query = db_query.filter(or_(
+                make_word_boundary_filter(database.Article.title),
+                make_word_boundary_filter(database.Article.scraped_text_content)
+            ))
         search_source_display_parts.append(f"Keyword: '{query.keyword}'")
 
     user_article_ids_with_state = db.query(database.UserArticleState.article_id).filter(
@@ -164,6 +197,9 @@ async def get_news_summaries_endpoint(
         articles_to_filter = {a[0] for a in all_article_ids_in_feed}
     
     filtered_article_ids = articles_to_filter - user_deleted_ids
+    
+    if not query.favorites_only:
+        filtered_article_ids = filtered_article_ids - user_favorite_ids
     
     if query.read_state == "unread":
         filtered_article_ids = filtered_article_ids - user_read_ids

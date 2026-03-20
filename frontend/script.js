@@ -460,7 +460,11 @@ function setupGlobalEventListeners() {
 
     if (navMainBtn) {
         navMainBtn.addEventListener('click', async () => {
-            if (state.activeView === 'main' && document.getElementById('main-feed-section').classList.contains('active') && state.activeFeedFilterIds.length === 0) return;
+            if (state.activeView === 'main' && 
+                document.getElementById('main-feed-section').classList.contains('active') && 
+                state.activeFeedFilterIds.length === 0 && 
+                !state.currentKeywordSearch &&
+                state.activeTagFilterIds.length === 0) return;
 
             uiManager.showSection('main-feed-section');
             state.setActiveView('main');
@@ -470,6 +474,8 @@ function setupGlobalEventListeners() {
             state.setCurrentPage(1);
             uiManager.updateFeedFilterDropdownSelection();
             uiManager.updateNavButtonStyles();
+            const keywordInput = document.getElementById('keyword-search-input');
+            if (keywordInput) keywordInput.value = '';
             await fetchAndDisplaySummaries(false, 1, null);
         });
     }
