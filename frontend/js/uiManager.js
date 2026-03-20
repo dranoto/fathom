@@ -11,7 +11,7 @@ import * as chatHandler from './chatHandler.js';
 
 // --- DOM Element References ---
 let resultsContainer, loadingIndicator, loadingText, infiniteScrollLoadingIndicator,
-    activeTagFiltersDisplay,
+    activeTagFiltersDisplay, mobileActiveTagFiltersDisplay,
     mainFeedSection, setupSection, navMainBtn, navFavoritesBtn, navDeletedBtn, navSettingsBtn,
     regenerateSummaryModal, closeRegenerateModalBtn, modalArticleIdInput, modalSummaryPromptInput, modalUseDefaultPromptBtn,
     fullArticleModal, closeFullArticleModalBtn, fullArticleModalTitle, fullArticleModalBody, fullArticleModalOriginalLink;
@@ -78,6 +78,7 @@ export function initializeUIDOMReferences() {
     loadingText = document.getElementById('loading-text');
     infiniteScrollLoadingIndicator = document.getElementById('infinite-scroll-loading-indicator');
     activeTagFiltersDisplay = document.getElementById('active-tag-filters-display');
+    mobileActiveTagFiltersDisplay = document.getElementById('mobile-active-tag-filters-display');
     mainFeedSection = document.getElementById('main-feed-section');
     setupSection = document.getElementById('setup-section');
     navMainBtn = document.getElementById('nav-main-btn');
@@ -505,45 +506,64 @@ export function updateActiveTagFiltersUI(onRemoveTagFilterCallback, onClearAllFi
         return;
     }
     activeTagFiltersDisplay.innerHTML = '';
+    if (mobileActiveTagFiltersDisplay) {
+        mobileActiveTagFiltersDisplay.innerHTML = '';
+    }
+    
     if (state.activeTagFilterIds.length === 0) {
         activeTagFiltersDisplay.style.display = 'none';
+        if (mobileActiveTagFiltersDisplay) {
+            mobileActiveTagFiltersDisplay.style.display = 'none';
+        }
         return;
     }
+    
+    const createFilterContent = (container) => {
+        const heading = document.createElement('span');
+        heading.textContent = 'Filtered by: ';
+        heading.style.fontWeight = 'bold';
+        container.appendChild(heading);
+        
+        state.activeTagFilterIds.forEach(tagObj => {
+            const tagSpan = document.createElement('span');
+            tagSpan.classList.add('active-tag-filter');
+            tagSpan.textContent = tagObj.name;
+            const removeBtn = document.createElement('span');
+            removeBtn.classList.add('remove-tag-filter-btn');
+            removeBtn.textContent = '×';
+            removeBtn.title = `Remove filter: ${tagObj.name}`;
+            removeBtn.onclick = () => {
+                if (onRemoveTagFilterCallback && typeof onRemoveTagFilterCallback === 'function') {
+                    onRemoveTagFilterCallback(tagObj.id);
+                }
+            };
+            tagSpan.appendChild(removeBtn);
+            container.appendChild(tagSpan);
+        });
+        
+        if (state.activeTagFilterIds.length > 1) {
+            const clearAllBtn = document.createElement('button');
+            clearAllBtn.classList.add('clear-all-filters-btn');
+            clearAllBtn.textContent = 'Clear all';
+            clearAllBtn.style.marginLeft = '10px';
+            clearAllBtn.style.padding = '3px 8px';
+            clearAllBtn.style.fontSize = '0.85em';
+            clearAllBtn.style.cursor = 'pointer';
+            clearAllBtn.onclick = () => {
+                if (onClearAllFiltersCallback && typeof onClearAllFiltersCallback === 'function') {
+                    onClearAllFiltersCallback();
+                }
+            };
+            container.appendChild(clearAllBtn);
+        }
+    };
+    
     activeTagFiltersDisplay.style.display = 'block';
-    const heading = document.createElement('span');
-    heading.textContent = 'Filtered by: ';
-    heading.style.fontWeight = 'bold';
-    activeTagFiltersDisplay.appendChild(heading);
-    state.activeTagFilterIds.forEach(tagObj => {
-        const tagSpan = document.createElement('span');
-        tagSpan.classList.add('active-tag-filter');
-        tagSpan.textContent = tagObj.name;
-        const removeBtn = document.createElement('span');
-        removeBtn.classList.add('remove-tag-filter-btn');
-        removeBtn.textContent = '×';
-        removeBtn.title = `Remove filter: ${tagObj.name}`;
-        removeBtn.onclick = () => {
-            if (onRemoveTagFilterCallback && typeof onRemoveTagFilterCallback === 'function') {
-                onRemoveTagFilterCallback(tagObj.id);
-            }
-        };
-        tagSpan.appendChild(removeBtn);
-        activeTagFiltersDisplay.appendChild(tagSpan);
-    });
-    if (state.activeTagFilterIds.length > 1) {
-        const clearAllBtn = document.createElement('button');
-        clearAllBtn.classList.add('clear-all-filters-btn');
-        clearAllBtn.textContent = 'Clear all';
-        clearAllBtn.style.marginLeft = '10px';
-        clearAllBtn.style.padding = '3px 8px';
-        clearAllBtn.style.fontSize = '0.85em';
-        clearAllBtn.style.cursor = 'pointer';
-        clearAllBtn.onclick = () => {
-            if (onClearAllFiltersCallback && typeof onClearAllFiltersCallback === 'function') {
-                onClearAllFiltersCallback();
-            }
-        };
-        activeTagFiltersDisplay.appendChild(clearAllBtn);
+    createFilterContent(activeTagFiltersDisplay);
+    
+    if (mobileActiveTagFiltersDisplay) {
+        mobileActiveTagFiltersDisplay.style.display = 'flex';
+        createFilterContent(mobileActiveTagFiltersDisplay);
     }
 }
 
