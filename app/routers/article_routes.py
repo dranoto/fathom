@@ -784,10 +784,13 @@ async def get_deleted_articles(
         if not deleted_article_ids:
             return []
         
-        articles = db.query(database.Article).filter(
+        # Only query articles that still exist in the database
+        existing_articles = db.query(database.Article).filter(
             database.Article.id.in_(deleted_article_ids),
             database.Article.feed_source_id.in_(feed_source_id_set)
         ).all()
+        
+        existing_article_ids = {a.id for a in existing_articles}
         
         feed_sources = db.query(database.FeedSource).filter(
             database.FeedSource.id.in_(feed_source_id_set)
@@ -795,7 +798,7 @@ async def get_deleted_articles(
         feed_source_map = {fs.id: fs.name for fs in feed_sources}
         
         results = []
-        for article in articles:
+        for article in existing_articles:
             state = next((s for s in deleted_states if s.article_id == article.id), None)
             publisher = feed_source_map.get(article.feed_source_id) if article.feed_source_id else None
             if not publisher:

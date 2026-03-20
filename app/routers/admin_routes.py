@@ -298,15 +298,30 @@ async def cleanup_old_data(
     db: SQLAlchemySession = Depends(database.get_db),
     admin_user: database.User = Depends(require_admin)
 ):
-    """Delete articles older than specified days."""
-    from datetime import datetime, timezone
-    cutoff_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    cutoff_date = cutoff_date.replace(day=cutoff_date.day - days_old)
+    """Delete articles older than specified days, skipping any favorited by users."""
+    from datetime import datetime, timezone, timedelta
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_old)
+    cutoff_date = cutoff_date.replace(hour=0, minute=0, second=0, microsecond=0)
     
-    deleted_count = db.query(database.Article).filter(
+    favorited_article_ids = db.query(database.UserArticleState.article_id).filter(
+        database.UserArticleState.is_favorite == True
+    ).distinct().all()
+    favorited_ids_set = {f[0] for f in favorited_article_ids if f[0] is not None}
+    
+    query = db.query(database.Article).filter(
         database.Article.created_at < cutoff_date
-    ).delete()
+    )
+    
+    if favorited_ids_set:
+        query = query.filter(~database.Article.id.in_(favorited_ids_set))
+    
+    articles_to_delete = query.all()
+    deleted_count = len(articles_to_delete)
+    
+    for article in articles_to_delete:
+        db.delete(article)
+    
     db.commit()
     
-    logger.info(f"Admin {admin_user.id} deleted {deleted_count} articles older than {days_old} days")
-    return {"message": f"Deleted {deleted_count} articles older than {days_old} days"}
+    logger.info(f"Admin {admin_user.id} deleted {deleted_count} articles older than {days_old} days (kept {len(favorited_ids_set)} favorited)")
+    return {"message": f"Deleted {deleted_count} articles older than {days_old} days", "favorited_kept": len(favorited_ids_set)}
