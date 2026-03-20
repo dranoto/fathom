@@ -789,12 +789,16 @@ async def get_deleted_articles(
             database.Article.feed_source_id.in_(feed_source_id_set)
         ).all()
         
+        feed_sources = db.query(database.FeedSource).filter(
+            database.FeedSource.id.in_(feed_source_id_set)
+        ).all()
+        feed_source_map = {fs.id: fs.name for fs in feed_sources}
+        
         results = []
         for article in articles:
             state = next((s for s in deleted_states if s.article_id == article.id), None)
-            try:
-                publisher = article.feed_source.name if article.feed_source else article.publisher_name
-            except Exception:
+            publisher = feed_source_map.get(article.feed_source_id) if article.feed_source_id else None
+            if not publisher:
                 publisher = article.publisher_name or "Unknown"
             results.append({
                 "id": article.id,
