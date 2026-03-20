@@ -89,15 +89,18 @@ async def get_news_summaries_endpoint(
             database.article_tag_association.c.user_id == current_user.id,
             database.article_tag_association.c.tag_id.in_(query.tag_ids)
         )
-        tagged_article_ids_result = db.query(database.Article.id).filter(
-            database.Article.feed_source_id.in_(feed_source_id_set),
-            database.article_tag_association.c.user_id == current_user.id,
-            database.article_tag_association.c.tag_id.in_(query.tag_ids)
+        tagged_article_ids_result = db.query(
+            database.article_tag_association.c.article_id
         ).join(
-            database.article_tag_association,
-            database.Article.id == database.article_tag_association.c.article_id
+            database.Article,
+            database.article_tag_association.c.article_id == database.Article.id
+        ).filter(
+            database.article_tag_association.c.user_id == current_user.id,
+            database.article_tag_association.c.tag_id.in_(query.tag_ids),
+            database.Article.feed_source_id.in_(feed_source_id_set)
         ).all()
         tagged_article_ids = {a[0] for a in tagged_article_ids_result}
+        logger.info(f"DEBUG: tagged_article_ids = {tagged_article_ids}")
         tag_names_result = db.query(database.Tag.name).join(
             database.article_tag_association,
             database.Tag.id == database.article_tag_association.c.tag_id
