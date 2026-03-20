@@ -483,7 +483,7 @@ export function populateFeedFilterDropdown() {
     }
     if (!feedFilterSelect) return;
 
-    feedFilterSelect.innerHTML = '<option value="">Filter by feeds...</option>';
+    feedFilterSelect.innerHTML = '<option value="">All Feeds</option>';
     
     state.dbFeedSources.forEach(feed => {
         const option = document.createElement('option');
@@ -493,20 +493,6 @@ export function populateFeedFilterDropdown() {
         option.textContent = displayName;
         option.title = feed.url;
         feedFilterSelect.appendChild(option);
-    });
-}
-
-export function updateFeedFilterDropdownSelection() {
-    if (!feedFilterSelect) return;
-    
-    const options = feedFilterSelect.querySelectorAll('option');
-    options.forEach(option => {
-        const feedId = option.value ? parseInt(option.value) : null;
-        if (feedId && state.activeFeedFilterIds.includes(feedId)) {
-            option.selected = true;
-        } else {
-            option.selected = false;
-        }
     });
 }
 
@@ -643,17 +629,7 @@ export function setupUIManagerEventListeners(onRegenerateModalUseDefaultPrompt) 
     if (closeFullArticleModalBtn) {
         closeFullArticleModalBtn.onclick = closeFullArticleModal;
     }
-    // The main nav buttons (Main, Favorites) are now handled in script.js to allow state changes.
-    // The setup button can stay here as it only controls section visibility.
-    if (navSetupBtn) {
-        navSetupBtn.addEventListener('click', () => {
-            showSection('setup-section');
-            // We also need to ensure the view state is consistent if we came from favorites
-            if (state.activeView !== 'main') {
-                state.setActiveView('main');
-            }
-        });
-    }
+    // The main nav buttons are now handled in script.js
     console.log("UIManager: Basic event listeners set up.");
 }
 

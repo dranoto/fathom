@@ -484,18 +484,19 @@ function setupGlobalEventListeners() {
     const feedFilterSelect = document.getElementById('feed-filter-select');
     if (feedFilterSelect) {
         feedFilterSelect.addEventListener('change', () => {
-            const selectedOptions = Array.from(feedFilterSelect.selectedOptions);
-            const selectedIds = selectedOptions
-                .map(opt => opt.value ? parseInt(opt.value) : null)
-                .filter(id => id !== null);
+            const selectedValue = feedFilterSelect.value;
+            const selectedId = selectedValue ? parseInt(selectedValue) : null;
             
-            state.setActiveFeedFilterIds(selectedIds);
+            if (selectedId) {
+                state.setActiveFeedFilterIds([selectedId]);
+            } else {
+                state.setActiveFeedFilterIds([]);
+            }
             state.setActiveTagFilterIds([]);
             state.setCurrentKeywordSearch(null);
             state.setActiveView('main');
             const keywordInput = document.getElementById('keyword-search-input');
             if(keywordInput) keywordInput.value = '';
-            uiManager.updateFeedFilterDropdownSelection();
             uiManager.updateFeedFilterButtonStyles();
             uiManager.updateNavButtonStyles();
             uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter);
