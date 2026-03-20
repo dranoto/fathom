@@ -272,12 +272,6 @@ export async function postChatMessage(payload) {
     });
 }
 
-export async function deleteOldData(daysOld) {
-    return handleFetch(`/api/admin/cleanup-old-data?days_old=${daysOld}`, { 
-        method: 'DELETE' 
-    });
-}
-
 export async function fetchSanitizedArticleContent(articleId) {
     return handleFetch(`${CHAT_API_ENDPOINT_BASE}/articles/${articleId}/content`);
 }

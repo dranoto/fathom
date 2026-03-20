@@ -4,19 +4,14 @@ import * as apiService from './apiService.js';
 
 /**
  * This module handles loading, saving, and applying application configurations.
- * It now exclusively interacts with the backend for settings persistence.
  */
 
 // --- DOM Element References for the Setup Tab ---
 let numArticlesSetupInput, currentNumArticlesDisplay,
-    minimumWordCountSetupInput, currentMinimumWordCountDisplay,
     summaryPromptInput, currentSummaryPromptDisplay,
     tagGenerationPromptInput, currentTagGenerationPromptDisplay,
     chatPromptInput, currentChatPromptDisplay,
-    rssFetchIntervalInput, currentRssFetchIntervalDisplay,
-    contentPrefsForm, aiPromptsForm, globalRssSettingsForm, resetPromptsBtn,
-    aiModelsForm, summaryModelSelect, chatModelSelect, tagModelSelect,
-    refreshModelsBtn;
+    contentPrefsForm, aiPromptsForm, resetPromptsBtn;
 
 /**
  * Initializes the configuration manager by fetching DOM elements.
@@ -24,27 +19,16 @@ let numArticlesSetupInput, currentNumArticlesDisplay,
 export function initializeDOMReferences() {
     numArticlesSetupInput = document.getElementById('num_articles_setup');
     currentNumArticlesDisplay = document.getElementById('current-num-articles-display');
-    minimumWordCountSetupInput = document.getElementById('minimum-word-count-setup');
-    currentMinimumWordCountDisplay = document.getElementById('current-minimum-word-count-display');
     summaryPromptInput = document.getElementById('summary-prompt-input');
     currentSummaryPromptDisplay = document.getElementById('current-summary-prompt-display');
     tagGenerationPromptInput = document.getElementById('tag-generation-prompt-input');
     currentTagGenerationPromptDisplay = document.getElementById('current-tag-generation-prompt-display');
     chatPromptInput = document.getElementById('chat-prompt-input');
     currentChatPromptDisplay = document.getElementById('current-chat-prompt-display');
-    rssFetchIntervalInput = document.getElementById('rss-fetch-interval-input');
-    currentRssFetchIntervalDisplay = document.getElementById('current-rss-fetch-interval-display');
 
     contentPrefsForm = document.getElementById('content-prefs-form');
     aiPromptsForm = document.getElementById('ai-prompts-form');
-    globalRssSettingsForm = document.getElementById('global-rss-settings-form');
     resetPromptsBtn = document.getElementById('reset-prompts-btn');
-
-    aiModelsForm = document.getElementById('ai-models-form');
-    summaryModelSelect = document.getElementById('summary-model-select');
-    chatModelSelect = document.getElementById('chat-model-select');
-    tagModelSelect = document.getElementById('tag-model-select');
-    refreshModelsBtn = document.getElementById('refresh-models-btn');
 
     console.log("ConfigManager: DOM references initialized.");
 }
@@ -56,10 +40,6 @@ export function initializeDOMReferences() {
 export function loadConfigurations(initialBackendConfig) {
     console.log("ConfigManager: Loading configurations from backend...");
 
-    // Set API endpoints in the apiService module.
-    // This breaks the circular dependency between apiService and state.
-    apiService.setApiEndpoints(state.SUMMARIES_API_ENDPOINT, state.CHAT_API_ENDPOINT_BASE);
-
     if (!initialBackendConfig || !initialBackendConfig.settings) {
         console.error("ConfigManager: Initial backend config is missing or invalid.", initialBackendConfig);
         return;
@@ -67,45 +47,13 @@ export function loadConfigurations(initialBackendConfig) {
 
     const settings = initialBackendConfig.settings;
 
-    // Set state from backend settings
     state.setArticlesPerPage(settings.articles_per_page);
-    state.setMinimumWordCount(settings.minimum_word_count);
-    state.setGlobalRssFetchInterval(settings.rss_fetch_interval_minutes);
 
-    // Set prompts
     state.setDefaultPrompts(settings.summary_prompt, settings.chat_prompt, settings.tag_generation_prompt);
     state.setCurrentPrompts(settings.summary_prompt, settings.chat_prompt, settings.tag_generation_prompt);
 
-    // Set models
-    state.setAvailableModels(initialBackendConfig.available_models);
-    state.setDefaultModels(settings.summary_model_name, settings.chat_model_name, settings.tag_model_name);
-    state.setCurrentModels(settings.summary_model_name, settings.chat_model_name, settings.tag_model_name);
-
     updateSetupUI();
     console.log("ConfigManager: Configurations loaded and UI updated.");
-}
-
-function populateModelDropdowns() {
-    const selects = [
-        { el: summaryModelSelect, current: state.currentSummaryModel },
-        { el: chatModelSelect, current: state.currentChatModel },
-        { el: tagModelSelect, current: state.currentTagModel },
-    ];
-
-    selects.forEach(selectInfo => {
-        if (selectInfo.el) {
-            selectInfo.el.innerHTML = '';
-            state.availableModels.forEach(modelName => {
-                const option = document.createElement('option');
-                option.value = modelName;
-                option.textContent = modelName;
-                if (modelName === selectInfo.current) {
-                    option.selected = true;
-                }
-                selectInfo.el.appendChild(option);
-            });
-        }
-    });
 }
 
 /**
@@ -123,8 +71,6 @@ export function updateSetupUI() {
 
     if (numArticlesSetupInput) numArticlesSetupInput.value = state.articlesPerPage;
     if (currentNumArticlesDisplay) currentNumArticlesDisplay.textContent = state.articlesPerPage;
-    if (minimumWordCountSetupInput) minimumWordCountSetupInput.value = state.minimumWordCount;
-    if (currentMinimumWordCountDisplay) currentMinimumWordCountDisplay.textContent = state.minimumWordCount;
 
     if (summaryPromptInput) summaryPromptInput.value = state.currentSummaryPrompt;
     if (currentSummaryPromptDisplay) currentSummaryPromptDisplay.textContent = state.currentSummaryPrompt;
@@ -132,11 +78,6 @@ export function updateSetupUI() {
     if (currentTagGenerationPromptDisplay) currentTagGenerationPromptDisplay.textContent = state.currentTagGenerationPrompt;
     if (chatPromptInput) chatPromptInput.value = state.currentChatPrompt;
     if (currentChatPromptDisplay) currentChatPromptDisplay.textContent = state.currentChatPrompt;
-
-    if (rssFetchIntervalInput) rssFetchIntervalInput.value = state.globalRssFetchInterval;
-    if (currentRssFetchIntervalDisplay) currentRssFetchIntervalDisplay.textContent = state.globalRssFetchInterval;
-
-    populateModelDropdowns();
 
     console.log("ConfigManager: Setup UI elements updated.");
 }
@@ -149,21 +90,13 @@ async function saveConfiguration() {
     try {
         const settingsToSave = {
             articles_per_page: state.articlesPerPage,
-            minimum_word_count: state.minimumWordCount,
-            rss_fetch_interval_minutes: state.globalRssFetchInterval,
             summary_prompt: state.currentSummaryPrompt,
             chat_prompt: state.currentChatPrompt,
             tag_generation_prompt: state.currentTagGenerationPrompt,
-            summary_model_name: state.currentSummaryModel,
-            chat_model_name: state.currentChatModel,
-            tag_model_name: state.currentTagModel,
         };
 
         const response = await apiService.updateConfig({ settings: settingsToSave });
 
-        // The backend now re-initializes models, so no need to do it here.
-        // We can update the state with the confirmed settings from the response if needed,
-        // but it should already match the local state.
         console.log("ConfigManager: Save successful.", response);
         alert('Settings saved successfully!');
 
@@ -174,45 +107,30 @@ async function saveConfiguration() {
 }
 
 /**
- * Saves the content preference settings (articles per page, min word count).
- * This function now awaits the callback to fix a race condition.
+ * Saves the content preference settings (articles per page).
  */
-export async function saveContentPreferences(articlesPerPage, minWordCount, callback) {
+export async function saveContentPreferences(articlesPerPage, callback) {
     const newArticlesPerPage = parseInt(articlesPerPage);
-    const newMinWordCount = parseInt(minWordCount);
 
     if (isNaN(newArticlesPerPage) || newArticlesPerPage < 1 || newArticlesPerPage > 50) {
         alert('Please enter a number of articles per page between 1 and 50.');
-        return; // No return value needed, just stop execution
-    }
-    if (isNaN(newMinWordCount) || newMinWordCount < 0 || newMinWordCount > 1000) {
-        alert('Please enter a minimum word count between 0 and 1000.');
-        return; // No return value needed, just stop execution
+        return;
     }
 
-    // Check if the values have actually changed to prevent unnecessary saves and reloads
-    const hasChanged = newArticlesPerPage !== state.articlesPerPage || newMinWordCount !== state.minimumWordCount;
+    const hasChanged = newArticlesPerPage !== state.articlesPerPage;
     if (!hasChanged) {
         console.log("ConfigManager: No changes detected in content preferences. Skipping save.");
-        // Even if no changes, we might still want to run the callback if one is provided,
-        // for instance, to simply refresh the view. However, in this specific flow,
-        // it's better to just exit to avoid unexpected reloads.
         return;
     }
 
     state.setArticlesPerPage(newArticlesPerPage);
-    state.setMinimumWordCount(newMinWordCount);
     updateSetupUI();
 
-    await saveConfiguration(); // Persist all settings
+    await saveConfiguration();
 
-    // This part is crucial for fixing the race condition.
-    // We reset the page and then *await the callback* which fetches the new data.
-    // The event listener that calls this function also awaits it, ensuring the
-    // entire sequence completes before anything else can happen.
     state.setCurrentPage(1);
     if (callback && typeof callback === 'function') {
-        await callback(); // Await the callback to ensure completion
+        await callback();
     }
 }
 
@@ -237,16 +155,7 @@ export function saveAiPrompts(newSummaryPrompt, newChatPrompt, newTagGenerationP
         newTagGenerationPrompt.trim() || state.defaultTagGenerationPrompt
     );
     updateSetupUI();
-    saveConfiguration(); // Persist all settings
-}
-
-/**
- * Saves the selected AI models.
- */
-export async function saveAiModels(summaryModel, chatModel, tagModel) {
-    state.setCurrentModels(summaryModel, chatModel, tagModel);
-    updateSetupUI();
-    await saveConfiguration(); // Persist all settings
+    saveConfiguration();
 }
 
 /**
@@ -254,45 +163,9 @@ export async function saveAiModels(summaryModel, chatModel, tagModel) {
  */
 export function resetAiPromptsToDefaults() {
     if (confirm("Are you sure you want to reset prompts to their default values?")) {
-        // We don't have separate defaults anymore, so we need to reload the config.
-        // A simpler approach is to just re-set them from the initial defaults,
-        // but a full save is better to be consistent.
         state.setCurrentPrompts(state.defaultSummaryPrompt, state.defaultChatPrompt, state.defaultTagGenerationPrompt);
         updateSetupUI();
         saveConfiguration();
-    }
-}
-
-/**
- * Refreshes the available models list from the backend.
- */
-export async function refreshAvailableModels() {
-    console.log("ConfigManager: Refreshing available models...");
-    try {
-        const response = await apiService.refreshAvailableModels();
-        if (response.models) {
-            state.setAvailableModels(response.models);
-            populateModelDropdowns();
-            console.log(`ConfigManager: Refreshed ${response.models.length} available models.`);
-            alert('Models refreshed successfully!');
-        }
-    } catch (error) {
-        console.error('ConfigManager: Failed to refresh models:', error);
-        alert('Error refreshing models. Please check the console for details.');
-    }
-}
-
-/**
- * Saves the global RSS fetch interval preference.
- */
-export function saveGlobalRssFetchInterval(interval) {
-    const newInterval = parseInt(interval);
-    if (!isNaN(newInterval) && newInterval >= 5) {
-        state.setGlobalRssFetchInterval(newInterval);
-        updateSetupUI();
-        saveConfiguration();
-    } else {
-        alert("Please enter a valid interval (minimum 5 minutes).");
     }
 }
 
@@ -306,24 +179,13 @@ export function setupFormEventListeners(callbacks = {}) {
     }
     contentPrefsForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        await saveContentPreferences(numArticlesSetupInput.value, minimumWordCountSetupInput.value, callbacks.onArticlesPerPageChange);
+        await saveContentPreferences(numArticlesSetupInput.value, callbacks.onArticlesPerPageChange);
     });
     aiPromptsForm.addEventListener('submit', (e) => {
         e.preventDefault();
         saveAiPrompts(summaryPromptInput.value, chatPromptInput.value, tagGenerationPromptInput.value);
     });
     resetPromptsBtn.addEventListener('click', resetAiPromptsToDefaults);
-    globalRssSettingsForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        saveGlobalRssFetchInterval(rssFetchIntervalInput.value);
-    });
-    aiModelsForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        saveAiModels(summaryModelSelect.value, chatModelSelect.value, tagModelSelect.value);
-    });
-    if (refreshModelsBtn) {
-        refreshModelsBtn.addEventListener('click', refreshAvailableModels);
-    }
     console.log("ConfigManager: Setup form event listeners attached.");
 }
 

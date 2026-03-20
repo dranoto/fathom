@@ -88,30 +88,11 @@
                             <label for="num_articles_setup">Articles per Page:</label>
                             <input type="number" id="num_articles_setup" name="num_articles_setup" value="6" min="1" max="20" required>
                         </div>
-                        <div class="form-group">
-                            <label for="minimum-word-count-setup">Minimum Word Count for Articles:</label>
-                            <input type="number" id="minimum-word-count-setup" name="minimum_word_count_setup" value="100" min="0" max="1000" required>
-                            <small>Articles with fewer words will be hidden from the feed.</small>
-                        </div>
-                        <button type="submit" class="submit-button">Save Content Preferences</button>
+                        <button type="submit" class="submit-button">Save</button>
                     </form>
                     <p>Current articles per page: <span id="current-num-articles-display">6</span></p>
-                    <p>Current minimum word count: <span id="current-minimum-word-count-display">100</span></p>
                 </div>
                 
-                <div class="setup-block">
-                    <h3>Global RSS Feed Settings</h3>
-                    <form id="global-rss-settings-form">
-                        <div class="form-group">
-                            <label for="rss-fetch-interval-input">Default Fetch Interval (minutes):</label>
-                            <input type="number" id="rss-fetch-interval-input" value="60" min="5" max="1440" required>
-                             <small>This is a frontend preference for new feeds. Backend scheduler interval is set on the server.</small>
-                        </div>
-                        <button type="submit" class="submit-button">Save Interval</button>
-                    </form>
-                    <p>Current default fetch interval: <span id="current-rss-fetch-interval-display">60</span> minutes.</p>
-                </div>
-
                 <div class="setup-block">
                     <h3>My RSS Feeds</h3>
                     <div class="form-group">
@@ -163,64 +144,12 @@
                     <p><strong>Tag Gen:</strong></p><pre id="current-tag-generation-prompt-display" class="prompt-preview"></pre>
                     <p><strong>Chat:</strong></p><pre id="current-chat-prompt-display" class="prompt-preview"></pre>
                 </div>
-
-                <div class="setup-block">
-                    <h3>AI Model Configuration</h3>
-                    <form id="ai-models-form">
-                        <div class="form-group">
-                            <label for="summary-model-select">Summary Model:</label>
-                            <select id="summary-model-select" name="summary-model-select"></select>
-                        </div>
-                        <div class="form-group">
-                            <label for="chat-model-select">Chat Model:</label>
-                            <select id="chat-model-select" name="chat-model-select"></select>
-                        </div>
-                        <div class="form-group">
-                            <label for="tag-model-select">Tag Generation Model:</label>
-                            <select id="tag-model-select" name="tag-model-select"></select>
-                        </div>
-                        <div class="form-group">
-                            <button type="button" id="refresh-models-btn" class="secondary-button">Refresh Models</button>
-                        </div>
-                        <button type="submit" class="submit-button">Save Models</button>
-                    </form>
-                </div>
-
-                 <div class="setup-block">
-                    <h3>API Endpoints (Advanced)</h3>
-                    <form id="api-endpoint-form">
-                        <div class="form-group">
-                            <label for="api-url">API URL for Summaries:</label>
-                            <input type="text" id="api-url" value="/api/get-news-summaries">
-                        </div>
-                         <div class="form-group">
-                            <label for="chat-api-url">API URL for Chat:</label>
-                            <input type="text" id="chat-api-url" value="/api/chat-with-article">
-                        </div>
-                        <button type="submit" class="submit-button">Set API URLs</button>
-                    </form>
-                    <p>Current Summaries URL: <span id="current-api-url-display">/api/get-news-summaries</span></p>
-                    <p>Current Chat URL: <span id="current-chat-api-url-display">/api/chat-with-article</span></p>
-                </div>
-
-                <div class="setup-block">
-                    <h3>Data Management</h3>
-                    <div class="form-group">
-                        <label for="days-old-input">Delete articles older than (days):</label>
-                        <input type="number" id="days-old-input" value="30" min="1" max="3650" style="max-width: 100px;">
-                        <button type="button" id="delete-old-data-btn" class="action-button clear-all" style="margin-left:10px;">Delete Old Data</button>
-                    </div>
-                    <p id="delete-status-message" style="margin-top:10px;"></p>
-                </div>
             </section>
 
             <section id="deleted-section" class="content-section">
                 <h2>Deleted Articles</h2>
                 <p>Articles are automatically purged after 30 days.</p>
                 <div id="deleted-articles-list"></div>
-                <div id="deleted-actions" style="margin-top: 20px; display: none;">
-                    <button id="restore-all-deleted-btn" class="action-button">Restore All</button>
-                </div>
             </section>
         </main>
         <footer>

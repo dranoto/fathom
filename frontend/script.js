@@ -14,7 +14,6 @@ import { initDebugManager, showDebugPanel } from './js/debugManager.js';
 
 // --- DOM Element References (for elements directly handled by this main script) ---
 let refreshNewsBtn, keywordSearchInput, keywordSearchBtn,
-    deleteOldDataBtn, daysOldInput, deleteStatusMessage,
     regeneratePromptForm;
 
 // --- Auth DOM References ---
@@ -495,27 +494,6 @@ function setupGlobalEventListeners() {
             }
         });
     } else { console.warn("MainScript: Refresh news button not found."); }
-    
-    deleteOldDataBtn = document.getElementById('delete-old-data-btn');
-    daysOldInput = document.getElementById('days-old-input');
-    deleteStatusMessage = document.getElementById('delete-status-message');
-    if (deleteOldDataBtn && daysOldInput && deleteStatusMessage) {
-        deleteOldDataBtn.addEventListener('click', async () => {
-            const days = parseInt(daysOldInput.value);
-            if (isNaN(days) || days <= 0) { alert("Please enter a valid positive number of days."); return; }
-            if (!confirm(`Are you sure you want to delete all articles older than ${days} days? This cannot be undone.`)) return;
-            deleteStatusMessage.textContent = "Deleting old data..."; deleteStatusMessage.style.color = 'inherit';
-            try {
-                const result = await apiService.deleteOldData(days);
-                alert(result.message || "Old data cleanup process completed.");
-                deleteStatusMessage.textContent = result.message || "Cleanup complete."; deleteStatusMessage.style.color = 'green';
-                state.setCurrentPage(1); fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch);
-            } catch (error) {
-                console.error("MainScript: Error deleting old data:", error); alert(`Error deleting old data: ${error.message}`);
-                deleteStatusMessage.textContent = `Error: ${error.message}`; deleteStatusMessage.style.color = 'red';
-            }
-        });
-    } else { console.warn("MainScript: Delete old data elements not found."); }
 
     regeneratePromptForm = document.getElementById('regenerate-prompt-form');
     if (regeneratePromptForm) {
@@ -616,8 +594,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadDeletedArticles() {
     const deletedList = document.getElementById('deleted-articles-list');
-    const deletedActions = document.getElementById('deleted-actions');
-    const restoreAllBtn = document.getElementById('restore-all-deleted-btn');
     
     if (!deletedList) return;
     
@@ -628,7 +604,6 @@ async function loadDeletedArticles() {
         
         if (articles.length === 0) {
             deletedList.innerHTML = '<p>No deleted articles.</p>';
-            if (deletedActions) deletedActions.style.display = 'none';
             return;
         }
         
@@ -644,7 +619,6 @@ async function loadDeletedArticles() {
                 </div>
                 <div class="deleted-article-actions">
                     <button class="restore-btn" data-id="${article.id}">Restore</button>
-                    <button class="permanent-delete-btn" data-id="${article.id}">Delete Forever</button>
                 </div>
             `;
             deletedList.appendChild(item);
@@ -658,34 +632,7 @@ async function loadDeletedArticles() {
                     alert('Error restoring article');
                 }
             });
-            
-            item.querySelector('.permanent-delete-btn').addEventListener('click', async (e) => {
-                const id = e.target.dataset.id;
-                if (!confirm('Permanently delete this article? This cannot be undone.')) return;
-                try {
-                    await apiService.permanentlyDeleteArticle(parseInt(id));
-                    await loadDeletedArticles();
-                } catch (error) {
-                    alert('Error deleting article');
-                }
-            });
         });
-        
-        if (deletedActions) deletedActions.style.display = 'block';
-        
-        if (restoreAllBtn) {
-            restoreAllBtn.onclick = async () => {
-                if (!confirm('Restore all deleted articles?')) return;
-                try {
-                    for (const article of articles) {
-                        await apiService.restoreArticle(article.id);
-                    }
-                    await loadDeletedArticles();
-                } catch (error) {
-                    alert('Error restoring articles');
-                }
-            };
-        }
         
     } catch (error) {
         console.error('Error loading deleted articles:', error);

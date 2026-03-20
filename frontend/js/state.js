@@ -10,7 +10,6 @@
 export let dbFeedSources = []; 
 export let userFeeds = [];
 export let articlesPerPage = 6;
-export let minimumWordCount = 100;
 export let currentPage = 1; 
 export let totalPages = 1; 
 export let totalArticlesAvailable = 0; 
@@ -21,12 +20,6 @@ export let currentChatHistory = [];
 // For polling
 export let lastKnownLatestArticleTimestamp = null; // Stores ISO string
 
-// --- API Endpoints & Configuration ---
-// Default values. These will be updated by configManager.js from localStorage or backend initial config.
-// The backend route for summaries was changed to /api/articles/summaries
-export let SUMMARIES_API_ENDPOINT = '/api/articles/summaries'; 
-export let CHAT_API_ENDPOINT_BASE = '/api'; 
-
 // --- Prompts (Defaults and Current Values) ---
 export let defaultSummaryPrompt = "Task:Generate a concise, narrative summary of the following article. The output must be Markdown-formatted, engaging, and suitable for a news digest. Focus on the key information, main actors, outcomes, and any significant implications. Ensure the summary flows well and captures the essence of the article. Avoid overly technical jargon unless essential and explained. Structure with a clear beginning, middle, and end. {text}";
 export let defaultChatPrompt = "Persona & Goal:You are an insightful AI analyst and conversational partner. Your purpose is to help the user explore the provided article's content in greater depth, moving beyond the initial summary. Engage with their questions thoughtfully, provide detailed explanations, clarify complexities, and offer different perspectives based *only* on the article text. If the user asks for information outside the article, politely state that you can only discuss the provided text. Formatting: Use Markdown for all responses, including bolding, italics, bullet points, and numbered lists where appropriate to enhance readability and structure. Ensure your answers are well-organized and easy to follow. Task: Given the article text below, and the user's question, provide a comprehensive and helpful answer. Article Text: {article_text} Question: {question} Answer (in Markdown):";
@@ -35,18 +28,6 @@ export let defaultTagGenerationPrompt = "Given the following article text, gener
 export let currentSummaryPrompt = defaultSummaryPrompt;
 export let currentChatPrompt = defaultChatPrompt;
 export let currentTagGenerationPrompt = defaultTagGenerationPrompt;
-
-// --- Models (Available, Defaults, and Current Values) ---
-export let availableModels = [];
-export let defaultSummaryModel = '';
-export let defaultChatModel = '';
-export let defaultTagModel = '';
-export let currentSummaryModel = '';
-export let currentChatModel = '';
-export let currentTagModel = '';
-
-
-export let globalRssFetchInterval = 60; 
 
 // --- Locally tracked favorited articles (to hide from main page) ---
 export let locallyFavoritedArticleIds = new Set();
@@ -71,13 +52,6 @@ export function setArticlesPerPage(count) {
     const numCount = parseInt(count);
     if (!isNaN(numCount) && numCount > 0) {
         articlesPerPage = numCount;
-    }
-}
-
-export function setMinimumWordCount(count) {
-    const numCount = parseInt(count);
-    if (!isNaN(numCount) && numCount >= 0) {
-        minimumWordCount = numCount;
     }
 }
 
@@ -124,31 +98,6 @@ export function setCurrentPrompts(summary, chat, tag) {
     currentSummaryPrompt = summary || defaultSummaryPrompt;
     currentChatPrompt = chat || defaultChatPrompt;
     currentTagGenerationPrompt = tag || defaultTagGenerationPrompt;
-}
-
-export function setAvailableModels(models) {
-    if (Array.isArray(models)) {
-        availableModels = models;
-    }
-}
-
-export function setDefaultModels(summary, chat, tag) {
-    if (summary) defaultSummaryModel = summary;
-    if (chat) defaultChatModel = chat;
-    if (tag) defaultTagModel = tag;
-}
-
-export function setCurrentModels(summary, chat, tag) {
-    currentSummaryModel = summary || defaultSummaryModel;
-    currentChatModel = chat || defaultChatModel;
-    currentTagModel = tag || defaultTagModel;
-}
-
-export function setGlobalRssFetchInterval(interval) {
-    const numInterval = parseInt(interval);
-    if (!isNaN(numInterval) && numInterval >= 5) { 
-        globalRssFetchInterval = numInterval;
-    }
 }
 
 export function setActiveFeedFilterIds(ids) {
