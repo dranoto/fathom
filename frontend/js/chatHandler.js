@@ -131,6 +131,7 @@ export function openArticleChatModal(articleData) {
     fetchAndDisplayChatHistoryForModal(articleData.id); 
 
     articleChatModal.style.display = "block";
+    document.body.style.overflow = 'hidden';
     chatModalQuestionInput.value = ''; 
     chatModalQuestionInput.focus();
     console.log(`ChatHandler: Opened chat modal for article ID: ${articleData.id}`);
@@ -143,6 +144,7 @@ export function closeArticleChatModal() {
     if (articleChatModal) {
         articleChatModal.style.display = "none";
     }
+    document.body.style.overflow = '';
     state.setCurrentArticleForChat(null);
     state.setCurrentChatHistory([]); 
     console.log("ChatHandler: Chat modal closed.");
