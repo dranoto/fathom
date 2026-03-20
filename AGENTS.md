@@ -298,7 +298,10 @@ async function fetchAndDisplaySummaries(forceBackendRssRefresh = false) {
 │   ├── __init__.py
 │   ├── main_api.py          # FastAPI app entry point
 │   ├── config.py            # Environment configuration
-│   ├── database.py          # SQLAlchemy models & setup
+│   ├── database/            # SQLAlchemy models & migrations
+│   │   ├── __init__.py
+│   │   ├── models.py
+│   │   └── migrations.py
 │   ├── schemas.py           # Pydantic models
 │   ├── dependencies.py      # FastAPI dependencies
 │   ├── scraper.py           # Web scraping logic
@@ -306,22 +309,34 @@ async function fetchAndDisplaySummaries(forceBackendRssRefresh = false) {
 │   ├── rss_client.py        # RSS feed handling
 │   ├── tasks.py             # Background tasks (APScheduler)
 │   ├── settings_database.py # Settings DB operations
+│   ├── security.py          # Auth helpers
+│   ├── sanitizer.py         # HTML sanitization
 │   └── routers/             # API route handlers
 │       ├── article_routes.py
-│       ├── feed_routes.py
+│       ├── article_helpers.py
+│       ├── feed_routes.py    # Admin-only feed management
+│       ├── user_routes.py    # User feed subscriptions
 │       ├── chat_routes.py
-│       └── ...
+│       ├── config_routes.py
+│       ├── content_routes.py
+│       ├── auth_routes.py
+│       └── debug_routes.py
 ├── frontend/
 │   ├── index.html
+│   ├── admin.html           # Admin panel
 │   ├── script.js
 │   ├── css/
 │   └── js/                  # ES modules
 │       ├── state.js
 │       ├── apiService.js
-│       └── ...
-├── scraper_assistant/        # Chrome extension (not for modification)
+│       ├── feedHandler.js
+│       ├── uiManager.js
+│       ├── configManager.js
+│       └── debugManager.js
+├── scraper_assistant/        # Chrome extension (gitignored)
 ├── requirements.txt
 ├── Dockerfile
+├── AGENTS.md
 └── .env                      # Environment variables (gitignored)
 ```
 
@@ -421,3 +436,54 @@ These settings are stored in `settings.db`:
 5. **Database migrations** - Handle missing columns gracefully (see `database.py` for pattern)
 6. **Environment variables** - All configuration via `.env`, never hardcoded
 7. **Virtual environment** - Use `.venv/` for local development (gitignored)
+
+---
+
+## Git Workflow
+
+### Commits
+
+**Make small, frequent commits** - Each commit should represent a single logical change:
+
+```
+# Good commit messages
+"Fix: Correct summary regeneration and mobile button functionality"
+"Add: Per-user feed subscriptions with custom names"
+"Refactor: Centralized feed library with FeedSource table"
+
+# Avoid vague commits
+"Updates"
+"More changes"
+"Fix stuff"
+```
+
+**Commit guidelines:**
+- Commit early and often - don't wait for "perfect" code
+- Each commit should compile and not break functionality
+- Write commit messages in present tense: "Add feature" not "Added feature"
+- Use prefixes: `Fix:`, `Add:`, `Refactor:`, `Update:`, `Remove:`
+
+**Before committing:**
+```bash
+git status  # Review what changed
+git diff    # Check changes are correct
+```
+
+**Push regularly:**
+```bash
+git push git@github.com:dranoto/fathom.git main
+```
+
+### Branching
+
+- Work on `main` branch for this project
+- Create feature branches if working on large experimental changes
+
+### Gitignore
+
+The following should always be gitignored:
+- `.venv/` - virtual environment
+- `data/*.db` - SQLite databases (contain user-specific data)
+- `.env` - environment variables with secrets
+- `scraper_assistant/` - Chrome extension directory
+- `__pycache__/`, `*.pyc` - Python cache
