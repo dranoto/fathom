@@ -4,315 +4,235 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Panel - AI News Today</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="/static/css/base.css">
     <link rel="stylesheet" href="/static/css/layout.css">
     <link rel="stylesheet" href="/static/css/navigation.css">
     <link rel="stylesheet" href="/static/css/forms.css">
+    <link rel="stylesheet" href="/static/css/modals.css">
+    <link rel="stylesheet" href="/static/css/responsive.css">
+    
     <style>
-        .admin-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
         .admin-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
-            border-bottom: 2px solid #ddd;
-            padding-bottom: 15px;
+            margin-bottom: 25px;
         }
-        .admin-section {
-            background: #f9f9f9;
-            border: 1px solid #ddd;
+        .admin-header h1 {
+            margin: 0;
+            font-size: 2em;
+        }
+        .tab-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab-btn {
+            padding: 12px 24px;
+            background-color: #ecf0f1;
+            border: 1px solid #bdc3c7;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: all 0.2s;
+        }
+        .tab-btn:hover {
+            background-color: #d5dbdb;
+        }
+        .tab-btn.active {
+            background-color: #1abc9c;
+            color: white;
+            border-color: #1abc9c;
+        }
+        .stat-cards {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+        }
+        .stat-card {
+            background: #ffffff;
+            padding: 20px 25px;
             border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            min-width: 150px;
         }
-        .admin-section h2 {
-            margin-top: 0;
-            color: #333;
-            border-bottom: 1px solid #ccc;
-            padding-bottom: 10px;
+        .stat-card h4 {
+            margin: 0 0 8px 0;
+            color: #7f8c8d;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stat-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #2c3e50;
         }
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 15px;
-        }
-        th, td {
-            text-align: left;
-            padding: 10px;
-            border-bottom: 1px solid #ddd;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
         }
         th {
-            background: #eee;
+            background: #34495e;
+            color: #ecf0f1;
+            padding: 15px 12px;
+            text-align: left;
             font-weight: 600;
         }
-        tr:hover {
-            background: #f5f5f5;
-        }
-        .btn {
-            padding: 6px 12px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-        .btn-danger:hover {
-            background: #c82333;
-        }
-        .btn-primary {
-            background: #007bff;
-            color: white;
-        }
-        .btn-primary:hover {
-            background: #0056b3;
-        }
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-        .btn-secondary:hover {
-            background: #545b62;
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 500;
-        }
-        .form-group input, .form-group select, .form-group textarea {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        .form-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
-        }
-        .tab-container {
-            margin-bottom: 20px;
-        }
-        .tab-buttons {
-            display: flex;
-            gap: 5px;
-            border-bottom: 2px solid #ddd;
-        }
-        .tab-btn {
-            padding: 10px 20px;
-            background: #eee;
-            border: none;
-            border-radius: 4px 4px 0 0;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .tab-btn.active {
-            background: #f9f9f9;
-            border-bottom: 2px solid #f9f9f9;
-            margin-bottom: -2px;
-        }
-        .tab-content {
-            display: none;
-        }
-        .tab-content.active {
-            display: block;
-        }
-        .alert {
+        td {
             padding: 12px;
-            border-radius: 4px;
-            margin-bottom: 15px;
+            border-bottom: 1px solid #ecf0f1;
         }
-        .alert-success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
+        tr:last-child td {
+            border-bottom: none;
         }
-        .alert-error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
+        tr:hover td {
+            background: #f8f9f9;
         }
-        .model-input {
+        .inline-form {
             display: flex;
             gap: 10px;
             align-items: center;
+            flex-wrap: wrap;
         }
-        .model-input input {
+        .inline-form .form-group {
+            margin-bottom: 0;
             flex: 1;
+            min-width: 200px;
         }
-        .model-input button {
-            flex-shrink: 0;
+        .add-feed-section {
+            margin-bottom: 30px;
         }
-        .feed-stats {
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+        }
+        .settings-section {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .settings-section h3 {
+            margin-top: 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #1abc9c;
+        }
+        .model-row {
             display: flex;
-            gap: 20px;
+            gap: 10px;
             margin-bottom: 15px;
+            align-items: center;
         }
-        .feed-stat {
-            background: #e9ecef;
-            padding: 10px 15px;
-            border-radius: 4px;
-        }
-        .feed-stat strong {
-            font-size: 20px;
-            color: #007bff;
+        .model-row input {
+            flex: 1;
         }
         .loading {
             text-align: center;
-            padding: 20px;
-            color: #666;
-        }
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.5);
-            z-index: 1000;
-        }
-        .modal.active {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-content {
-            background: #fff;
-            padding: 25px;
-            border-radius: 8px;
-            width: 90%;
-            max-width: 500px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-        }
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        .modal-header h3 {
-            margin: 0;
-        }
-        .modal-close {
-            background: none;
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            padding: 0;
-            line-height: 1;
-        }
-        .modal-actions {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-            margin-top: 20px;
+            padding: 40px;
+            color: #7f8c8d;
         }
     </style>
 </head>
 <body>
-    <nav class="top-nav">
-        <div class="nav-brand">
-            <a href="/" class="brand-link">AI News Today</a>
-        </div>
-        <div class="nav-links">
-            <a href="/">News Feed</a>
-            <a href="/setup">Setup</a>
-            <a href="/admin" class="active">Admin</a>
-        </div>
-        <div class="nav-user" id="navUser"></div>
-    </nav>
-
-    <main class="admin-container">
-        <div class="admin-header">
-            <h1>Admin Panel</h1>
-            <button class="btn btn-secondary" onclick="logout()">Logout</button>
-        </div>
-
-        <div id="alertContainer"></div>
-
-        <div class="tab-container">
-            <div class="tab-buttons">
-                <button class="tab-btn active" onclick="showTab('users')">Users</button>
-                <button class="tab-btn" onclick="showTab('feeds')">Feeds</button>
-                <button class="tab-btn" onclick="showTab('settings')">Settings</button>
+    <div class="page-container">
+        <header>
+            <div class="container">
+                <h1>AI News Today</h1>
+                <p class="tagline">Admin Panel</p>
             </div>
-        </div>
+        </header>
 
-        <div id="usersTab" class="tab-content active">
-            <div class="admin-section">
-                <h2>Users</h2>
-                <div id="usersList">
-                    <div class="loading">Loading users...</div>
+        <nav class="main-nav container">
+            <div class="nav-left">
+                <a href="/" class="nav-button">News Feed</a>
+                <a href="/setup" class="nav-button">Setup</a>
+                <span class="nav-button active">Admin</span>
+            </div>
+            <div class="nav-right">
+                <span id="navUser" style="color: #ecf0f1; margin-right: 10px;"></span>
+                <button class="nav-button" onclick="logout()">Logout</button>
+            </div>
+        </nav>
+
+        <main class="container">
+            <div id="alertContainer"></div>
+
+            <div class="content-section active">
+                <div class="tab-buttons">
+                    <button class="tab-btn active" onclick="showTab('users')">Users</button>
+                    <button class="tab-btn" onclick="showTab('feeds')">Feeds</button>
+                    <button class="tab-btn" onclick="showTab('settings')">Settings</button>
                 </div>
-            </div>
-        </div>
 
-        <div id="feedsTab" class="tab-content">
-            <div class="admin-section">
-                <h2>Global Feeds</h2>
-                <div class="feed-stats">
-                    <div class="feed-stat">
-                        <strong id="totalFeeds">0</strong> Total Feeds
-                    </div>
-                    <div class="feed-stat">
-                        <strong id="totalArticles">0</strong> Total Articles
+                <div id="usersTab" class="tab-content">
+                    <div id="usersList">
+                        <div class="loading">Loading users...</div>
                     </div>
                 </div>
-                
-                <div class="admin-section" style="background: #fff;">
-                    <h3>Add New Feed</h3>
-                    <form id="addFeedForm" onsubmit="addFeed(event)">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="feedUrl">Feed URL *</label>
-                                <input type="url" id="feedUrl" required placeholder="https://example.com/feed.xml">
-                            </div>
-                            <div class="form-group">
-                                <label for="feedName">Name (optional)</label>
-                                <input type="text" id="feedName" placeholder="My Feed">
-                            </div>
-                            <div class="form-group">
-                                <label for="feedInterval">Fetch Interval (minutes)</label>
-                                <input type="number" id="feedInterval" value="60" min="5">
-                            </div>
+
+                <div id="feedsTab" class="tab-content">
+                    <div class="stat-cards">
+                        <div class="stat-card">
+                            <h4>Total Feeds</h4>
+                            <div class="value" id="totalFeeds">0</div>
                         </div>
-                        <button type="submit" class="btn btn-primary">Add Feed</button>
-                    </form>
+                        <div class="stat-card">
+                            <h4>Total Articles</h4>
+                            <div class="value" id="totalArticles">0</div>
+                        </div>
+                    </div>
+
+                    <div class="add-feed-section content-section">
+                        <h3 style="margin-top: 0;">Add New Feed</h3>
+                        <form id="addFeedForm" onsubmit="addFeed(event)">
+                            <div class="inline-form">
+                                <div class="form-group">
+                                    <label for="feedUrl">Feed URL *</label>
+                                    <input type="url" id="feedUrl" required placeholder="https://example.com/feed.xml">
+                                </div>
+                                <div class="form-group">
+                                    <label for="feedName">Name (optional)</label>
+                                    <input type="text" id="feedName" placeholder="My Feed">
+                                </div>
+                                <div class="form-group">
+                                    <label for="feedInterval">Interval (minutes)</label>
+                                    <input type="number" id="feedInterval" value="60" min="5">
+                                </div>
+                                <div class="form-group" style="align-self: flex-end;">
+                                    <button type="submit" class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;">Add Feed</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <div id="feedsList">
+                        <div class="loading">Loading feeds...</div>
+                    </div>
                 </div>
 
-                <div id="feedsList">
-                    <div class="loading">Loading feeds...</div>
+                <div id="settingsTab" class="tab-content">
+                    <div id="settingsForm">
+                        <div class="loading">Loading settings...</div>
+                    </div>
                 </div>
             </div>
-        </div>
-
-        <div id="settingsTab" class="tab-content">
-            <div class="admin-section">
-                <h2>Global Model Settings</h2>
-                <div id="settingsForm">
-                    <div class="loading">Loading settings...</div>
-                </div>
-            </div>
-        </div>
-    </main>
+        </main>
+    </div>
 
     <div id="editFeedModal" class="modal">
         <div class="modal-content">
-            <div class="modal-header">
-                <h3>Edit Feed</h3>
-                <button class="modal-close" onclick="closeEditModal()">&times;</button>
-            </div>
+            <span class="close-button" onclick="closeEditModal()">&times;</span>
+            <h3>Edit Feed</h3>
             <form id="editFeedForm" onsubmit="saveEditedFeed(event)">
                 <input type="hidden" id="editFeedId">
                 <div class="form-group">
@@ -321,15 +241,15 @@
                 </div>
                 <div class="form-group">
                     <label for="editFeedUrl">URL</label>
-                    <input type="url" id="editFeedUrl" readonly style="background: #eee;">
+                    <input type="url" id="editFeedUrl" readonly style="background: #ecf0f1;">
                 </div>
                 <div class="form-group">
                     <label for="editFeedInterval">Fetch Interval (minutes)</label>
                     <input type="number" id="editFeedInterval" min="5" required>
                 </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                    <button type="button" class="nav-button" onclick="closeEditModal()">Cancel</button>
+                    <button type="submit" class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;">Save Changes</button>
                 </div>
             </form>
         </div>
@@ -345,9 +265,9 @@
         };
 
         window.showTab = function(tabName) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-            document.getElementById(tabName + 'Tab').classList.add('active');
+            document.getElementById(tabName + 'Tab').style.display = 'block';
             event.target.classList.add('active');
             
             if (tabName === 'settings') {
@@ -361,7 +281,7 @@
 
         function showAlert(message, type = 'success') {
             const container = document.getElementById('alertContainer');
-            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            container.innerHTML = `<div class="alert alert-${type}" style="padding: 15px; border-radius: 5px; margin-bottom: 15px; background: ${type === 'success' ? '#d4edda' : '#f8d7da'}; color: ${type === 'success' ? '#155724' : '#721c24'}; border: 1px solid ${type === 'success' ? '#c3e6cb' : '#f5c6cb'};">${message}</div>`;
             setTimeout(() => container.innerHTML = '', 5000);
         }
 
@@ -371,7 +291,7 @@
                 const container = document.getElementById('usersList');
                 
                 if (users.length === 0) {
-                    container.innerHTML = '<p>No users found.</p>';
+                    container.innerHTML = '<p style="padding: 20px;">No users found.</p>';
                     return;
                 }
                 
@@ -396,8 +316,8 @@
                                     <td>${u.feed_count}</td>
                                     <td>${u.article_state_count}</td>
                                     <td>
-                                        ${u.is_admin ? '<em>Cannot delete admin</em>' : 
-                                            `<button class="btn btn-danger" onclick="deleteUser(${u.id}, '${u.email}')">Delete</button>`}
+                                        ${u.is_admin ? '<em>Cannot delete</em>' : 
+                                            `<button class="nav-button" style="padding: 6px 12px; background: #e74c3c; border-color: #e74c3c; color: white;" onclick="deleteUser(${u.id}, '${u.email.replace(/'/g, "\\'")}')">Delete</button>`}
                                     </td>
                                 </tr>
                             `).join('')}
@@ -406,12 +326,12 @@
                 `;
             } catch (error) {
                 document.getElementById('usersList').innerHTML = 
-                    '<p class="alert alert-error">Error loading users: ' + error.message + '</p>';
+                    `<p style="color: #e74c3c; padding: 20px;">Error loading users: ${error.message}</p>`;
             }
         }
 
         window.deleteUser = async function(userId, email) {
-            if (!confirm(`Are you sure you want to delete user "${email}"? This will delete all their data.`)) {
+            if (!confirm(`Delete user "${email}"? This will delete all their data.`)) {
                 return;
             }
             try {
@@ -426,13 +346,14 @@
         async function loadFeeds() {
             try {
                 const feeds = await apiService.getAdminFeeds();
-                const container = document.getElementById('feedsList');
                 document.getElementById('totalFeeds').textContent = feeds.length;
                 document.getElementById('totalArticles').textContent = 
                     feeds.reduce((sum, f) => sum + f.article_count, 0);
                 
+                const container = document.getElementById('feedsList');
+                
                 if (feeds.length === 0) {
-                    container.innerHTML = '<p>No feeds found.</p>';
+                    container.innerHTML = '<p style="padding: 20px;">No feeds found.</p>';
                     return;
                 }
                 
@@ -453,16 +374,16 @@
                             ${feeds.map(f => `
                                 <tr>
                                     <td>${f.name}</td>
-                                    <td><code>${f.url}</code></td>
+                                    <td><code style="font-size: 0.85em;">${f.url}</code></td>
                                     <td>${f.user_count}</td>
                                     <td>${f.article_count}</td>
                                     <td>${f.fetch_interval_minutes}m</td>
                                     <td>${f.last_fetch_at ? new Date(f.last_fetch_at).toLocaleString() : 'Never'}</td>
                                     <td>
-                                        <button class="btn btn-secondary" onclick="openEditModal(${f.id}, '${f.name.replace(/'/g, "\\'")}', '${f.url}', ${f.fetch_interval_minutes})">Edit</button>
+                                        <button class="nav-button" style="padding: 6px 12px;" onclick="openEditModal(${f.id}, '${f.name.replace(/'/g, "\\'")}', '${f.url}', ${f.fetch_interval_minutes})">Edit</button>
                                         ${f.user_count > 0 ? 
-                                            `<em>Has users</em>` : 
-                                            `<button class="btn btn-danger" onclick="deleteFeed(${f.id}, '${f.name.replace(/'/g, "\\'")}')">Delete</button>`}
+                                            `<em style="color: #7f8c8d;">Has users</em>` : 
+                                            `<button class="nav-button" style="padding: 6px 12px; background: #e74c3c; border-color: #e74c3c; color: white;" onclick="deleteFeed(${f.id}, '${f.name.replace(/'/g, "\\'")}')">Delete</button>`}
                                     </td>
                                 </tr>
                             `).join('')}
@@ -471,7 +392,7 @@
                 `;
             } catch (error) {
                 document.getElementById('feedsList').innerHTML = 
-                    '<p class="alert alert-error">Error loading feeds: ' + error.message + '</p>';
+                    `<p style="color: #e74c3c; padding: 20px;">Error loading feeds: ${error.message}</p>`;
             }
         }
 
@@ -493,7 +414,7 @@
         };
 
         window.deleteFeed = async function(feedId, feedName) {
-            if (!confirm(`Are you sure you want to delete feed "${feedName}"? All articles will be deleted.`)) {
+            if (!confirm(`Delete feed "${feedName}"? All articles will be deleted.`)) {
                 return;
             }
             try {
@@ -510,11 +431,11 @@
             document.getElementById('editFeedName').value = name;
             document.getElementById('editFeedUrl').value = url;
             document.getElementById('editFeedInterval').value = interval;
-            document.getElementById('editFeedModal').classList.add('active');
+            document.getElementById('editFeedModal').style.display = 'flex';
         };
 
         window.closeEditModal = function() {
-            document.getElementById('editFeedModal').classList.remove('active');
+            document.getElementById('editFeedModal').style.display = 'none';
         };
 
         window.saveEditedFeed = async function(event) {
@@ -539,72 +460,66 @@
                 const container = document.getElementById('settingsForm');
                 
                 container.innerHTML = `
-                    <h3 style="margin-top: 0;">Models</h3>
-                    <div class="form-group">
-                        <label>Summary Model</label>
-                        <div class="model-input">
-                            <input type="text" id="summaryModel" value="${settings.summary_model || ''}">
-                            <button class="btn btn-primary" onclick="updateSetting('summary_model', document.getElementById('summaryModel').value)">Update</button>
+                    <div class="settings-grid">
+                        <div class="settings-section">
+                            <h3>Models</h3>
+                            <div class="model-row">
+                                <label style="width: 120px;">Summary:</label>
+                                <input type="text" id="summaryModel" value="${settings.summary_model || ''}">
+                                <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="updateSetting('summary_model', document.getElementById('summaryModel').value)">Update</button>
+                            </div>
+                            <div class="model-row">
+                                <label style="width: 120px;">Chat:</label>
+                                <input type="text" id="chatModel" value="${settings.chat_model || ''}">
+                                <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="updateSetting('chat_model', document.getElementById('chatModel').value)">Update</button>
+                            </div>
+                            <div class="model-row">
+                                <label style="width: 120px;">Tag:</label>
+                                <input type="text" id="tagModel" value="${settings.tag_model || ''}">
+                                <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="updateSetting('tag_model', document.getElementById('tagModel').value)">Update</button>
+                            </div>
+                        </div>
+                        <div class="settings-section">
+                            <h3>Max Output Tokens</h3>
+                            <div class="model-row">
+                                <label style="width: 120px;">Summary:</label>
+                                <input type="number" id="summaryMaxTokens" value="${settings.summary_max_output_tokens || '1024'}">
+                                <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="updateSetting('summary_max_output_tokens', document.getElementById('summaryMaxTokens').value)">Update</button>
+                            </div>
+                            <div class="model-row">
+                                <label style="width: 120px;">Chat:</label>
+                                <input type="number" id="chatMaxTokens" value="${settings.chat_max_output_tokens || '4096'}">
+                                <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="updateSetting('chat_max_output_tokens', document.getElementById('chatMaxTokens').value)">Update</button>
+                            </div>
+                            <div class="model-row">
+                                <label style="width: 120px;">Tag:</label>
+                                <input type="number" id="tagMaxTokens" value="${settings.tag_max_output_tokens || '100'}">
+                                <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="updateSetting('tag_max_output_tokens', document.getElementById('tagMaxTokens').value)">Update</button>
+                            </div>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label>Chat Model</label>
-                        <div class="model-input">
-                            <input type="text" id="chatModel" value="${settings.chat_model || ''}">
-                            <button class="btn btn-primary" onclick="updateSetting('chat_model', document.getElementById('chatModel').value)">Update</button>
+                    <div class="settings-section" style="margin-top: 25px;">
+                        <h3>Default Prompts</h3>
+                        <div class="form-group">
+                            <label>Summary Prompt</label>
+                            <textarea id="summaryPrompt" rows="3">${(settings.summary_prompt || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+                            <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c; margin-top: 8px;" onclick="updateSetting('summary_prompt', document.getElementById('summaryPrompt').value)">Update</button>
                         </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Tag Model</label>
-                        <div class="model-input">
-                            <input type="text" id="tagModel" value="${settings.tag_model || ''}">
-                            <button class="btn btn-primary" onclick="updateSetting('tag_model', document.getElementById('tagModel').value)">Update</button>
+                        <div class="form-group">
+                            <label>Chat Prompt</label>
+                            <textarea id="chatPrompt" rows="3">${(settings.chat_prompt || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+                            <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c; margin-top: 8px;" onclick="updateSetting('chat_prompt', document.getElementById('chatPrompt').value)">Update</button>
                         </div>
-                    </div>
-                    
-                    <h3>Max Tokens</h3>
-                    <div class="form-group">
-                        <label>Summary Max Tokens</label>
-                        <div class="model-input">
-                            <input type="number" id="summaryMaxTokens" value="${settings.summary_max_output_tokens || '1024'}">
-                            <button class="btn btn-primary" onclick="updateSetting('summary_max_output_tokens', document.getElementById('summaryMaxTokens').value)">Update</button>
+                        <div class="form-group">
+                            <label>Tag Generation Prompt</label>
+                            <textarea id="tagPrompt" rows="3">${(settings.tag_prompt || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+                            <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c; margin-top: 8px;" onclick="updateSetting('tag_prompt', document.getElementById('tagPrompt').value)">Update</button>
                         </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Chat Max Tokens</label>
-                        <div class="model-input">
-                            <input type="number" id="chatMaxTokens" value="${settings.chat_max_output_tokens || '4096'}">
-                            <button class="btn btn-primary" onclick="updateSetting('chat_max_output_tokens', document.getElementById('chatMaxTokens').value)">Update</button>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>Tag Max Tokens</label>
-                        <div class="model-input">
-                            <input type="number" id="tagMaxTokens" value="${settings.tag_max_output_tokens || '100'}">
-                            <button class="btn btn-primary" onclick="updateSetting('tag_max_output_tokens', document.getElementById('tagMaxTokens').value)">Update</button>
-                        </div>
-                    </div>
-                    
-                    <h3>Default Prompts (used when user has not customized)</h3>
-                    <div class="form-group">
-                        <label>Summary Prompt</label>
-                        <textarea id="summaryPrompt" rows="4" style="width: 100%; padding: 8px;">${(settings.summary_prompt || '').replace(/"/g, '&quot;')}</textarea>
-                        <button class="btn btn-primary" onclick="updateSetting('summary_prompt', document.getElementById('summaryPrompt').value)">Update</button>
-                    </div>
-                    <div class="form-group">
-                        <label>Chat Prompt</label>
-                        <textarea id="chatPrompt" rows="4" style="width: 100%; padding: 8px;">${(settings.chat_prompt || '').replace(/"/g, '&quot;')}</textarea>
-                        <button class="btn btn-primary" onclick="updateSetting('chat_prompt', document.getElementById('chatPrompt').value)">Update</button>
-                    </div>
-                    <div class="form-group">
-                        <label>Tag Generation Prompt</label>
-                        <textarea id="tagPrompt" rows="4" style="width: 100%; padding: 8px;">${(settings.tag_prompt || '').replace(/"/g, '&quot;')}</textarea>
-                        <button class="btn btn-primary" onclick="updateSetting('tag_prompt', document.getElementById('tagPrompt').value)">Update</button>
                     </div>
                 `;
             } catch (error) {
                 document.getElementById('settingsForm').innerHTML = 
-                    '<p class="alert alert-error">Error loading settings: ' + error.message + '</p>';
+                    `<p style="color: #e74c3c; padding: 20px;">Error loading settings: ${error.message}</p>`;
             }
         }
 
@@ -625,11 +540,11 @@
             }
             const user = JSON.parse(userData);
             if (!user.is_admin) {
-                document.getElementById('navUser').innerHTML = '<span>Not admin</span>';
+                document.getElementById('navUser').textContent = 'Not admin';
                 showAlert('Admin access required', 'error');
                 return;
             }
-            document.getElementById('navUser').innerHTML = `<span>${user.email}</span>`;
+            document.getElementById('navUser').textContent = user.email;
             loadUsers();
         }
 
