@@ -43,15 +43,14 @@
                 </div>
             </div>
             <div class="header-row header-row-nav">
-                <div class="view-buttons">
-                    <button id="nav-main-btn" class="view-btn active">All Feeds</button>
-                    <button id="nav-favorites-btn" class="view-btn">Favorites</button>
-                    <button id="nav-deleted-btn" class="view-btn">Archived</button>
-                </div>
                 <div class="feed-filter-wrapper">
                     <select id="feed-filter-select">
                         <option value="">All Feeds</option>
                     </select>
+                </div>
+                <div class="view-buttons">
+                    <button id="nav-favorites-btn" class="view-btn">Favorites</button>
+                    <button id="nav-deleted-btn" class="view-btn">Archived</button>
                 </div>
             </div>
         </header>
@@ -177,6 +176,11 @@
                             <h4>Total Articles</h4>
                             <div class="value" id="admin-total-articles">0</div>
                         </div>
+                    </div>
+
+                    <div class="admin-feeds-actions">
+                        <button id="admin-refresh-all-btn" class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="adminRefreshAllFeeds()">🔄 Refresh All Feeds</button>
+                        <span id="admin-refresh-status" style="margin-left: 15px; color: #7f8c8d;"></span>
                     </div>
 
                     <div class="add-feed-section content-section">

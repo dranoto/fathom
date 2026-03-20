@@ -390,7 +390,11 @@ function handleRegenerateModalUseDefaultPrompt() {
     }
 }
 
+let isGlobalEventListenersInitialized = false;
+
 function setupGlobalEventListeners() {
+    if (isGlobalEventListenersInitialized) return;
+    isGlobalEventListenersInitialized = true;
     console.log("MainScript: Setting up global event listeners...");
 
     const navMainBtn = document.getElementById('nav-main-btn');
@@ -409,33 +413,57 @@ function setupGlobalEventListeners() {
     }
 
     if (navFavoritesBtn) {
-        navFavoritesBtn.addEventListener('click', async () => {
-            if (state.activeView === 'favorites') return;
-
-            uiManager.showSection('main-feed-section');
-            state.setActiveView('favorites');
-            state.setCurrentPage(1);
-
-            state.setActiveFeedFilterIds([]);
-            state.setActiveTagFilterIds([]);
-            state.setCurrentKeywordSearch(null);
-            const keywordInput = document.getElementById('keyword-search-input');
-            if(keywordInput) keywordInput.value = '';
-
-            await fetchAndDisplaySummaries(false, 1, null);
-            uiManager.updateNavButtonStyles();
+        navFavoritesBtn.addEventListener('click', () => {
+            console.log('Favorites button clicked, current view:', state.activeView);
+            if (state.activeView === 'favorites') {
+                state.setActiveView('main');
+                const mainSectionTitle = document.querySelector('#main-feed-section h2');
+                if(mainSectionTitle) mainSectionTitle.textContent = 'Latest Summaries';
+                state.setActiveFeedFilterIds([]);
+                state.setActiveTagFilterIds([]);
+                state.setCurrentKeywordSearch(null);
+                const keywordInput = document.getElementById('keyword-search-input');
+                if(keywordInput) keywordInput.value = '';
+                state.setCurrentPage(1);
+                uiManager.showSection('main-feed-section');
+                uiManager.updateNavButtonStyles();
+                fetchAndDisplaySummaries(false, 1, null);
+            } else {
+                state.setActiveView('favorites');
+                state.setActiveFeedFilterIds([]);
+                state.setActiveTagFilterIds([]);
+                state.setCurrentKeywordSearch(null);
+                const keywordInput = document.getElementById('keyword-search-input');
+                if(keywordInput) keywordInput.value = '';
+                state.setCurrentPage(1);
+                uiManager.showSection('main-feed-section');
+                const mainSectionTitle = document.querySelector('#main-feed-section h2');
+                if(mainSectionTitle) mainSectionTitle.textContent = 'Favorites';
+                uiManager.updateNavButtonStyles();
+                fetchAndDisplaySummaries(false, 1, null);
+            }
         });
     }
 
     const navDeletedBtn = document.getElementById('nav-deleted-btn');
     if (navDeletedBtn) {
-        navDeletedBtn.addEventListener('click', async () => {
-            if (state.activeView === 'deleted') return;
-
-            uiManager.showSection('deleted-section');
-            state.setActiveView('deleted');
-            uiManager.updateNavButtonStyles();
-            await loadDeletedArticles();
+        navDeletedBtn.addEventListener('click', () => {
+            console.log('Archived button clicked, current view:', state.activeView);
+            if (state.activeView === 'deleted') {
+                state.setActiveView('main');
+                const mainSectionTitle = document.querySelector('#main-feed-section h2');
+                if(mainSectionTitle) mainSectionTitle.textContent = 'Latest Summaries';
+                state.setActiveFeedFilterIds([]);
+                state.setCurrentPage(1);
+                uiManager.showSection('main-feed-section');
+                uiManager.updateNavButtonStyles();
+                fetchAndDisplaySummaries(false, 1, null);
+            } else {
+                state.setActiveView('deleted');
+                uiManager.showSection('deleted-section');
+                uiManager.updateNavButtonStyles();
+                loadDeletedArticles();
+            }
         });
     }
 
@@ -497,6 +525,8 @@ function setupGlobalEventListeners() {
             state.setActiveView('main');
             const keywordInput = document.getElementById('keyword-search-input');
             if(keywordInput) keywordInput.value = '';
+            const mainSectionTitle = document.querySelector('#main-feed-section h2');
+            if(mainSectionTitle) mainSectionTitle.textContent = 'Latest Summaries';
             uiManager.updateFeedFilterButtonStyles();
             uiManager.updateNavButtonStyles();
             uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter);
@@ -988,6 +1018,7 @@ async function adminLoadFeeds() {
                             <td>${f.fetch_interval_minutes}m</td>
                             <td>${f.last_fetch_at ? new Date(f.last_fetch_at).toLocaleString() : 'Never'}</td>
                             <td>
+                                <button class="nav-button" style="padding: 6px 12px;" onclick="adminRefreshSingleFeed(${f.id}, '${f.name.replace(/'/g, "\\'")}')">🔄</button>
                                 <button class="nav-button" style="padding: 6px 12px;" onclick="adminOpenEditModal(${f.id}, '${f.name.replace(/'/g, "\\'")}', '${f.url}', ${f.fetch_interval_minutes})">Edit</button>
                                 ${f.user_count > 0 ? 
                                     `<em style="color: #7f8c8d;">Has users</em>` : 
@@ -1059,6 +1090,30 @@ window.adminSaveEditedFeed = async function(event) {
         adminLoadFeeds();
     } catch (error) {
         adminShowAlert('Error updating feed: ' + error.message, 'error');
+    }
+};
+
+window.adminRefreshAllFeeds = async function() {
+    const statusEl = document.getElementById('admin-refresh-status');
+    const btn = document.getElementById('admin-refresh-all-btn');
+    try {
+        btn.disabled = true;
+        statusEl.textContent = 'Refreshing...';
+        await apiService.refreshAllFeeds();
+        statusEl.textContent = 'Refresh initiated';
+        setTimeout(() => { statusEl.textContent = ''; btn.disabled = false; }, 3000);
+    } catch (error) {
+        statusEl.textContent = 'Error: ' + error.message;
+        btn.disabled = false;
+    }
+};
+
+window.adminRefreshSingleFeed = async function(feedId, feedName) {
+    try {
+        await apiService.refreshSingleFeed(feedId);
+        adminShowAlert(`Refresh initiated for "${feedName}"`);
+    } catch (error) {
+        adminShowAlert('Error: ' + error.message, 'error');
     }
 };
 

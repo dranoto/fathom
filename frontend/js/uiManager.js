@@ -202,7 +202,7 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
 
     const filteredArticles = articles.filter(article => {
         if (!article.is_summarizable) return false;
-        if (state.activeView !== 'favorites' && article.is_favorite) return false;
+        if (state.activeView === 'favorites' && !article.is_favorite) return false;
         return true;
     });
 
@@ -261,8 +261,8 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         // Delete button
         const deleteBtn = document.createElement('button');
         deleteBtn.classList.add('delete-article-btn');
-        deleteBtn.title = "Move to Deleted";
-        deleteBtn.innerHTML = '🗑';
+        deleteBtn.title = "Archive";
+        deleteBtn.innerHTML = '📦';
         deleteBtn.onclick = (e) => {
             e.stopPropagation();
             handleDeleteArticle(article.id, articleCard);
@@ -302,8 +302,8 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
 
         const collapsedDeleteBtn = document.createElement('button');
         collapsedDeleteBtn.classList.add('collapsed-delete-btn');
-        collapsedDeleteBtn.title = "Delete article";
-        collapsedDeleteBtn.innerHTML = '🗑';
+        collapsedDeleteBtn.title = "Archive";
+        collapsedDeleteBtn.innerHTML = '📦';
         collapsedDeleteBtn.onclick = (e) => {
             e.stopPropagation();
             handleDeleteArticle(article.id, articleCard);
@@ -522,8 +522,6 @@ export function updateNavButtonStyles() {
         if (navFavoritesBtn) navFavoritesBtn.classList.add('active');
     } else if (state.activeView === 'deleted') {
         if (navDeletedBtn) navDeletedBtn.classList.add('active');
-    } else {
-        if (navMainBtn) navMainBtn.classList.add('active');
     }
 }
 
