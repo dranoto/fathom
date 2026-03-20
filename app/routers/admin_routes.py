@@ -177,6 +177,32 @@ async def add_feed_source(
     logger.info(f"Admin {admin_user.id} added new feed source: {request.url}")
     return {"id": new_feed.id, "url": new_feed.url, "name": new_feed.name}
 
+@router.put("/feeds/{feed_id}")
+async def update_feed_source(
+    feed_id: int,
+    request: AddFeedRequest,
+    db: SQLAlchemySession = Depends(database.get_db),
+    admin_user: database.User = Depends(require_admin)
+):
+    """Update a feed source name and/or fetch interval."""
+    feed_db = db.query(database.FeedSource).filter(
+        database.FeedSource.id == feed_id
+    ).first()
+    if not feed_db:
+        raise HTTPException(status_code=404, detail="Feed not found")
+    
+    if request.name is not None:
+        feed_db.name = request.name
+    if request.fetch_interval_minutes is not None:
+        if request.fetch_interval_minutes <= 0:
+            raise HTTPException(status_code=400, detail="Fetch interval must be positive")
+        feed_db.fetch_interval_minutes = request.fetch_interval_minutes
+    
+    db.commit()
+    db.refresh(feed_db)
+    logger.info(f"Admin {admin_user.id} updated feed source {feed_id}")
+    return {"id": feed_db.id, "url": feed_db.url, "name": feed_db.name, "fetch_interval_minutes": feed_db.fetch_interval_minutes}
+
 @router.delete("/feeds/{feed_id}")
 async def delete_feed_source(
     feed_id: int,

@@ -380,6 +380,14 @@ export async function deleteAdminFeed(feedId) {
     });
 }
 
+export async function updateAdminFeed(feedId, feedData) {
+    return handleFetch(`/api/admin/feeds/${feedId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(feedData)
+    });
+}
+
 export async function getAdminSettings() {
     return handleFetch('/api/admin/settings/global');
 }
