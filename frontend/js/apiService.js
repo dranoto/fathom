@@ -394,4 +394,10 @@ export async function updateAdminSettings(settingsData) {
     });
 }
 
+export async function deleteOldData(daysOld) {
+    return handleFetch(`/api/admin/cleanup-old-data?days_old=${daysOld}`, {
+        method: 'DELETE'
+    });
+}
+
 console.log("frontend/js/apiService.js: Module loaded.");

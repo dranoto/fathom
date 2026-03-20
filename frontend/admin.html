@@ -497,6 +497,21 @@
                                 <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="updateSetting('tag_max_output_tokens', document.getElementById('tagMaxTokens').value)">Update</button>
                             </div>
                         </div>
+                        <div class="settings-section">
+                            <h3>System Settings</h3>
+                            <div class="model-row">
+                                <label style="width: 180px;">Min Word Count:</label>
+                                <input type="number" id="minimumWordCount" value="${settings.minimum_word_count || '100'}" min="0" max="1000" style="width: 80px;">
+                                <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="updateSetting('minimum_word_count', document.getElementById('minimumWordCount').value)">Update</button>
+                            </div>
+                            <p style="font-size: 0.85em; color: #7f8c8d; margin-top: 5px;">Articles with fewer words will be hidden from feeds.</p>
+                            <div class="model-row" style="margin-top: 15px;">
+                                <label style="width: 180px;">RSS Interval (min):</label>
+                                <input type="number" id="rssInterval" value="${settings.default_rss_fetch_interval_minutes || '60'}" min="5" max="1440" style="width: 80px;">
+                                <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;" onclick="updateSetting('default_rss_fetch_interval_minutes', document.getElementById('rssInterval').value)">Update</button>
+                            </div>
+                            <p style="font-size: 0.85em; color: #7f8c8d; margin-top: 5px;">How often to automatically fetch new articles.</p>
+                        </div>
                     </div>
                     <div class="settings-section" style="margin-top: 25px;">
                         <h3>Default Prompts</h3>
@@ -516,6 +531,17 @@
                             <button class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c; margin-top: 8px;" onclick="updateSetting('tag_prompt', document.getElementById('tagPrompt').value)">Update</button>
                         </div>
                     </div>
+                    <div class="settings-section" style="margin-top: 25px;">
+                        <h3>Data Management</h3>
+                        <div class="form-group">
+                            <label for="days-old-input">Delete articles older than (days):</label>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input type="number" id="days-old-input" value="30" min="1" max="3650" style="width: 100px;">
+                                <button class="nav-button" style="background: #e74c3c; border-color: #e74c3c; color: white;" onclick="deleteOldData()">Delete Old Articles</button>
+                            </div>
+                            <p id="delete-status" style="margin-top: 10px; font-size: 0.9em;"></p>
+                        </div>
+                    </div>
                 `;
             } catch (error) {
                 document.getElementById('settingsForm').innerHTML = 
@@ -529,6 +555,27 @@
                 showAlert('Setting updated');
             } catch (error) {
                 showAlert('Error updating setting: ' + error.message, 'error');
+            }
+        };
+
+        window.deleteOldData = async function() {
+            const days = parseInt(document.getElementById('days-old-input').value);
+            const statusEl = document.getElementById('delete-status');
+            if (isNaN(days) || days < 1) {
+                statusEl.textContent = 'Please enter a valid number of days.';
+                statusEl.style.color = '#e74c3c';
+                return;
+            }
+            if (!confirm(`Delete all articles older than ${days} days? This cannot be undone.`)) return;
+            statusEl.textContent = 'Deleting...';
+            statusEl.style.color = 'inherit';
+            try {
+                const result = await apiService.deleteOldData(days);
+                statusEl.textContent = result.message || 'Done';
+                statusEl.style.color = '#27ae60';
+            } catch (error) {
+                statusEl.textContent = 'Error: ' + error.message;
+                statusEl.style.color = '#e74c3c';
             }
         };
 

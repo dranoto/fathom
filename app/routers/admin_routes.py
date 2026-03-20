@@ -53,6 +53,8 @@ class GlobalSettingsResponse(BaseModel):
     summary_prompt: Optional[str] = None
     chat_prompt: Optional[str] = None
     tag_prompt: Optional[str] = None
+    minimum_word_count: Optional[int] = None
+    default_rss_fetch_interval_minutes: Optional[int] = None
 
 class UpdateGlobalSettingsRequest(BaseModel):
     summary_model: Optional[str] = None
@@ -64,6 +66,8 @@ class UpdateGlobalSettingsRequest(BaseModel):
     summary_prompt: Optional[str] = None
     chat_prompt: Optional[str] = None
     tag_prompt: Optional[str] = None
+    minimum_word_count: Optional[int] = None
+    default_rss_fetch_interval_minutes: Optional[int] = None
 
 class AddFeedRequest(BaseModel):
     url: str
@@ -230,7 +234,7 @@ async def get_global_settings(
     db: SQLAlchemySession = Depends(database.get_db),
     admin_user: database.User = Depends(require_admin)
 ):
-    """Get global model and prompt settings."""
+    """Get global model, prompt, and system settings."""
     from .. import settings_database
     
     def get_int(db, key, default):
@@ -248,6 +252,8 @@ async def get_global_settings(
             summary_prompt=settings_database.get_setting(settings_db, "summary_prompt", app_config.DEFAULT_SUMMARY_PROMPT),
             chat_prompt=settings_database.get_setting(settings_db, "chat_prompt", app_config.DEFAULT_CHAT_PROMPT),
             tag_prompt=settings_database.get_setting(settings_db, "tag_prompt", app_config.DEFAULT_TAG_GENERATION_PROMPT),
+            minimum_word_count=get_int(settings_db, "minimum_word_count", app_config.DEFAULT_MINIMUM_WORD_COUNT),
+            default_rss_fetch_interval_minutes=get_int(settings_db, "default_rss_fetch_interval_minutes", app_config.DEFAULT_RSS_FETCH_INTERVAL_MINUTES),
         )
 
 @router.put("/settings/global")
@@ -256,7 +262,7 @@ async def update_global_settings(
     db: SQLAlchemySession = Depends(database.get_db),
     admin_user: database.User = Depends(require_admin)
 ):
-    """Update global model and prompt settings."""
+    """Update global model, prompt, and system settings."""
     from .. import settings_database
     
     with settings_database.db_session_scope() as settings_db:
@@ -278,6 +284,29 @@ async def update_global_settings(
             settings_database.set_setting(settings_db, "chat_prompt", request.chat_prompt)
         if request.tag_prompt is not None:
             settings_database.set_setting(settings_db, "tag_prompt", request.tag_prompt)
+        if request.minimum_word_count is not None:
+            settings_database.set_setting(settings_db, "minimum_word_count", str(request.minimum_word_count))
+        if request.default_rss_fetch_interval_minutes is not None:
+            settings_database.set_setting(settings_db, "default_rss_fetch_interval_minutes", str(request.default_rss_fetch_interval_minutes))
         
         logger.info(f"Admin {admin_user.id} updated global settings")
         return {"message": "Settings updated"}
+
+@router.delete("/cleanup-old-data")
+async def cleanup_old_data(
+    days_old: int = 30,
+    db: SQLAlchemySession = Depends(database.get_db),
+    admin_user: database.User = Depends(require_admin)
+):
+    """Delete articles older than specified days."""
+    from datetime import datetime, timezone
+    cutoff_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    cutoff_date = cutoff_date.replace(day=cutoff_date.day - days_old)
+    
+    deleted_count = db.query(database.Article).filter(
+        database.Article.created_at < cutoff_date
+    ).delete()
+    db.commit()
+    
+    logger.info(f"Admin {admin_user.id} deleted {deleted_count} articles older than {days_old} days")
+    return {"message": f"Deleted {deleted_count} articles older than {days_old} days"}
