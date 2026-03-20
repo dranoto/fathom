@@ -107,18 +107,18 @@ async def fetch_and_store_articles_from_feed(db: Session, feed_source: FeedSourc
     and updates the feed_source's last_fetched_at timestamp.
     """
     logger.info(f"RSS_CLIENT: Fetching articles for: {feed_source.url} (Name: {feed_source.name})")
-    feed_data = await _parse_feed_in_thread(feed_source.url)
+    feed_data = await _parse_feed_in_thread(feed_source.url)  # type: ignore - SQLAlchemy Column
     current_time_utc = datetime.now(timezone.utc) 
 
     if feed_data is None or not hasattr(feed_data, 'feed') or not hasattr(feed_data, 'entries'):
         logger.warning(f"RSS_CLIENT: Failed to parse or invalid feed structure for {feed_source.url}")
-        feed_source.last_fetched_at = current_time_utc
+        feed_source.last_fetched_at = current_time_utc  # type: ignore - SQLAlchemy descriptor
         db.add(feed_source)
         return 0
 
-    feed_title_from_rss = feed_data.feed.get('title', feed_source.url.split('/')[2] if len(feed_source.url.split('/')) > 2 else feed_source.url)
-    if not feed_source.name and feed_title_from_rss: 
-        feed_source.name = feed_title_from_rss
+    feed_title_from_rss = feed_data.feed.get('title', feed_source.url.split('/')[2] if len(feed_source.url.split('/')) > 2 else feed_source.url)  # type: ignore - FeedParserDict type
+    if not feed_source.name and feed_title_from_rss:  # type: ignore - SQLAlchemy descriptor
+        feed_source.name = feed_title_from_rss  # type: ignore - SQLAlchemy descriptor
         db.add(feed_source)
 
     new_articles_count = 0
@@ -156,7 +156,7 @@ async def fetch_and_store_articles_from_feed(db: Session, feed_source: FeedSourc
 
     if not urls_to_scrape:
         logger.info(f"RSS_CLIENT: No new, valid article URLs to scrape from feed {feed_source.name}.")
-        feed_source.last_fetched_at = current_time_utc # Still update last_fetched_at
+        feed_source.last_fetched_at = current_time_utc  # type: ignore - SQLAlchemy descriptor
         db.add(feed_source)
         return 0
 
@@ -254,7 +254,7 @@ async def fetch_and_store_articles_from_feed(db: Session, feed_source: FeedSourc
         logger.debug(f"RSS_CLIENT: Staged new article for DB: {article_url} (Title: {article_title[:30]}...)")
 
 
-    feed_source.last_fetched_at = current_time_utc
+    feed_source.last_fetched_at = current_time_utc  # type: ignore - SQLAlchemy descriptor
     db.add(feed_source)
     logger.info(f"RSS_CLIENT: Finished processing feed {feed_source.name}. Staged {new_articles_count} new articles with scraped content for commit.")
     return new_articles_count
@@ -277,8 +277,8 @@ async def update_all_subscribed_feeds(db: Session):
                 logger.warning(f"RSS_CLIENT_SCHEDULER: Warning - Feed '{feed.name}' (ID: {feed.id}) has an offset-naive last_fetched_at ('{last_fetched_aware}'). Assuming UTC.")
                 last_fetched_aware = last_fetched_aware.replace(tzinfo=timezone.utc)
             
-            fetch_time_cutoff = now_aware - timedelta(minutes=feed.fetch_interval_minutes)
-            if last_fetched_aware < fetch_time_cutoff:
+            fetch_time_cutoff = now_aware - timedelta(minutes=feed.fetch_interval_minutes)  # type: ignore - SQLAlchemy Column
+            if last_fetched_aware < fetch_time_cutoff:  # type: ignore - SQLAlchemy Column
                 should_fetch = True
                 logger.info(f"RSS_CLIENT_SCHEDULER: Feed '{feed.name}' (ID: {feed.id}) due for update. Last fetched: {last_fetched_aware}, Cutoff: {fetch_time_cutoff}. Adding to queue.")
         
@@ -306,7 +306,7 @@ async def update_all_subscribed_feeds(db: Session):
                 # or if it became detached from the session.
                 feed_to_update_ts = db.query(FeedSource).filter(FeedSource.id == feed_source.id).first()
                 if feed_to_update_ts:
-                    feed_to_update_ts.last_fetched_at = datetime.now(timezone.utc) 
+                    feed_to_update_ts.last_fetched_at = datetime.now(timezone.utc)  # type: ignore - SQLAlchemy descriptor
                     db.add(feed_to_update_ts)
                     db.commit() 
                     logger.info(f"RSS_CLIENT_SCHEDULER: Updated last_fetched_at for errored feed {feed_source.url}.")
@@ -340,7 +340,7 @@ def update_single_feed(db: Session, feed_id: int):
         db.rollback()
         logger.error(f"RSS_CLIENT: Error processing single feed {feed_source.url}: {e}", exc_info=True)
         try:
-            feed_source.last_fetched_at = datetime.now(timezone.utc)
+            feed_source.last_fetched_at = datetime.now(timezone.utc)  # type: ignore - SQLAlchemy descriptor
             db.add(feed_source)
             db.commit()
         except Exception:

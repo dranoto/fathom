@@ -524,7 +524,7 @@ async def regenerate_article_summary(
         min_word_count_threshold=min_word_count_threshold,
         user_id=current_user.id,
         summary_text=new_summary_text,
-        error_message=None if not new_summary_text.startswith("Error:") else new_summary_text
+        error_message=None if not new_summary_text or not new_summary_text.startswith("Error:") else new_summary_text
     )
 
 

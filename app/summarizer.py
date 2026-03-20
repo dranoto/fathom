@@ -27,10 +27,10 @@ def initialize_llm(
     try:
         llm = ChatOpenAI(
             model=model_name,
-            openai_api_key=api_key,
-            openai_api_base=base_url,
+            openai_api_key=api_key,  # type: ignore - LangChain accepts via kwargs
+            openai_api_base=base_url,  # type: ignore - LangChain accepts via kwargs
             temperature=temperature,
-            max_tokens=max_tokens,
+            max_tokens=max_tokens,  # type: ignore - LangChain accepts via kwargs
         )
         logger.info(f"Successfully initialized LLM: {model_name} at {base_url} with max_tokens: {max_tokens}")
         return llm
@@ -68,9 +68,10 @@ async def summarize_document_content(
     MIN_CONTENT_LENGTH = 50
 
     if not current_content_to_summarize or len(current_content_to_summarize.strip()) < MIN_CONTENT_LENGTH:
+        plain_text_len = len(current_content_to_summarize.strip()) if current_content_to_summarize else 0
         logger.info(
             f"Plain text content from '{doc.metadata.get('source', 'Unknown')}' is too short "
-            f"(length: {len(current_content_to_summarize.strip() if current_content_to_summarize else 0)}). "
+            f"(length: {plain_text_len}). "
             f"Attempting to use HTML content."
         )
         html_content = doc.metadata.get('full_html_content')
@@ -83,16 +84,19 @@ async def summarize_document_content(
                 f"HTML length: {len(current_content_to_summarize.strip())}."
             )
         else:
+            plain_len = len(doc.page_content.strip()) if doc.page_content else 0
+            html_len = len(html_content.strip()) if html_content else 0
             logger.warning(
                 f"HTML content for '{doc.metadata.get('source', 'Unknown')}' is also too short or unavailable. "
-                f"Plain text length: {len(doc.page_content.strip() if doc.page_content else 0)}, "
-                f"HTML length: {len(html_content.strip() if html_content else 0)}."
+                f"Plain text length: {plain_len}, "
+                f"HTML length: {html_len}."
             )
             
     if not current_content_to_summarize or len(current_content_to_summarize.strip()) < MIN_CONTENT_LENGTH:
+        content_len = len(current_content_to_summarize.strip()) if current_content_to_summarize else 0
         logger.warning(
             f"Selected content ({content_source_description}) for '{doc.metadata.get('source', 'Unknown')}' "
-            f"is still too short (length: {len(current_content_to_summarize.strip() if current_content_to_summarize else 0)}) or empty to summarize."
+            f"is still too short (length: {content_len}) or empty to summarize."
         )
         raise SummarizationError("Content too short or empty to summarize.")
 
@@ -160,9 +164,12 @@ async def generate_tags_for_text(
         logger.info(f"Attempting to generate tags with prompt (first 150 chars): \"{formatted_prompt[:150]}...\"")
         
         response_obj = await llm_instance.ainvoke(formatted_prompt)
-        tags_string = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+        raw_content = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+        if isinstance(raw_content, list):
+            raw_content = ' '.join(str(c) for c in raw_content)
+        tags_string = raw_content.strip() if isinstance(raw_content, str) else str(raw_content)
 
-        if not tags_string.strip():
+        if not tags_string:
             logger.warning("Empty tag string received from LLM.")
             return []
 
@@ -270,13 +277,16 @@ async def get_chat_response(
 
     try:
         response_obj = await llm_instance.ainvoke(final_formatted_prompt)
-        answer = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+        raw_answer = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
+        if isinstance(raw_answer, list):
+            raw_answer = ' '.join(str(c) for c in raw_answer)
+        answer = raw_answer.strip() if isinstance(raw_answer, str) else str(raw_answer)
         
         logger.info(f"Chat LLM returned answer (length: {len(answer)}). First 100 chars: '{answer[:100]}...'")
-        if not answer.strip():
+        if not answer:
             logger.warning("Empty answer received from chat LLM.")
             return "AI returned an empty answer."
-        return answer.strip()
+        return answer
     except Exception as e:
         logger.error(f"ERROR getting answer from AI for chat: {e}", exc_info=True)
         return f"Error getting answer from AI: {str(e)}"
