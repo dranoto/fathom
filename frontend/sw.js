@@ -22,7 +22,7 @@ const STATIC_ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log('[SW] Caching shell assets');
+      console.log('[SW] Pre-caching shell assets');
       return cache.addAll(STATIC_ASSETS);
     })
   );
@@ -65,29 +65,32 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.pathname.startsWith('/static/') || url.pathname === '/') {
+  if (url.pathname.startsWith('/static/')) {
     event.respondWith(
-      caches.match(request).then((cachedResponse) => {
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-        return fetch(request).then((networkResponse) => {
-          if (networkResponse.ok) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone);
-            });
-          }
-          return networkResponse;
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.match(request).then((cachedResponse) => {
+          const networkFetch = fetch(request).then((networkResponse) => {
+            if (networkResponse.ok) {
+              cache.put(request, networkResponse.clone());
+            }
+            return networkResponse;
+          }).catch(() => null);
+
+          return cachedResponse || networkFetch;
         });
       })
     );
     return;
   }
 
+  if (url.pathname === '/') {
+    event.respondWith(
+      fetch(request).catch(() => caches.match('/'))
+    );
+    return;
+  }
+
   event.respondWith(
-    fetch(request).catch(() => {
-      return caches.match('/');
-    })
+    fetch(request).catch(() => caches.match('/'))
   );
 });
