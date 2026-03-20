@@ -496,6 +496,14 @@ export function populateFeedFilterDropdown() {
     });
 }
 
+export function updateFeedFilterDropdownSelection() {
+    if (!feedFilterSelect) {
+        feedFilterSelect = initializeFeedFilterDropdown();
+    }
+    if (!feedFilterSelect) return;
+    feedFilterSelect.value = '';
+}
+
 /**
  * Updates the visual style of the main navigation buttons (Main, Favorites, Deleted, Settings).
  */
