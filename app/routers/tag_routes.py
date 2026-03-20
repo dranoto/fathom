@@ -36,12 +36,41 @@ async def search_tags(
     normalized_query = normalize_tag_name(q)
     query_words = normalized_query.split()
     
+    feed_source_ids = db.query(database.UserFeedSubscription.feed_source_id).filter(
+        database.UserFeedSubscription.user_id == current_user.id
+    ).all()
+    feed_source_id_set = {f[0] for f in feed_source_ids}
+    
+    deleted_article_ids = set()
+    deleted_result = db.query(database.UserArticleState.article_id).filter(
+        database.UserArticleState.user_id == current_user.id,
+        database.UserArticleState.is_deleted == True
+    ).all()
+    deleted_article_ids = {r[0] for r in deleted_result}
+    
     user_tags = db.query(database.Tag).filter(
         database.Tag.user_id == current_user.id
     ).all()
     
     if not user_tags:
         return []
+    
+    def tag_has_active_article(tag_id):
+        articles_with_tag = db.query(
+            database.article_tag_association.c.article_id
+        ).join(
+            database.Article,
+            database.article_tag_association.c.article_id == database.Article.id
+        ).filter(
+            database.article_tag_association.c.user_id == current_user.id,
+            database.article_tag_association.c.tag_id == tag_id,
+            database.Article.feed_source_id.in_(feed_source_id_set)
+        ).all()
+        
+        for (article_id,) in articles_with_tag:
+            if article_id not in deleted_article_ids:
+                return True
+        return False
     
     exact_matches = []
     starts_with_matches = []
@@ -58,6 +87,9 @@ async def search_tags(
         )
     
     for tag in user_tags:
+        if not tag_has_active_article(tag.id):
+            continue
+            
         tag_normalized = tag.normalized_name or normalize_tag_name(tag.name)
         tag_words = tag_normalized.split()
         tag_words_set = set(tag_words)
