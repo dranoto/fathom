@@ -34,7 +34,7 @@ async def search_tags(
 ):
     logger.info(f"API: Searching tags for user {current_user.id} with query: {q}")
     normalized_query = normalize_tag_name(q)
-    query_words = set(normalized_query.split())
+    query_words = normalized_query.split()
     
     user_tags = db.query(database.Tag).filter(
         database.Tag.user_id == current_user.id
@@ -46,12 +46,21 @@ async def search_tags(
     exact_matches = []
     starts_with_matches = []
     substring_matches = []
-    all_words_match = []
+    word_prefix_matches = []
     fuzzy_matches = []
+    
+    def word_prefix_match(query_words_list, tag_words_set):
+        if not query_words_list:
+            return False
+        return all(
+            any(qw == tw or tw.startswith(qw) or qw.startswith(tw) for tw in tag_words_set)
+            for qw in query_words_list if len(qw) >= 2
+        )
     
     for tag in user_tags:
         tag_normalized = tag.normalized_name or normalize_tag_name(tag.name)
-        tag_words = set(tag_normalized.split())
+        tag_words = tag_normalized.split()
+        tag_words_set = set(tag_words)
         
         if tag_normalized == normalized_query:
             exact_matches.append((tag, 1.0))
@@ -59,8 +68,8 @@ async def search_tags(
             starts_with_matches.append((tag, 1.0 + len(normalized_query) / len(tag_normalized)))
         elif normalized_query in tag_normalized:
             substring_matches.append((tag, len(normalized_query) / len(tag_normalized)))
-        elif query_words and query_words.issubset(tag_words):
-            all_words_match.append((tag, len(query_words) / len(tag_words)))
+        elif len(normalized_query) >= 3 and word_prefix_match(query_words, tag_words_set):
+            word_prefix_matches.append((tag, 0.9))
         else:
             score = get_normalized_similarity(normalized_query, tag_normalized)
             if score >= 0.5:
@@ -68,7 +77,7 @@ async def search_tags(
     
     starts_with_matches.sort(key=lambda x: x[1], reverse=True)
     substring_matches.sort(key=lambda x: x[1], reverse=True)
-    all_words_match.sort(key=lambda x: x[1], reverse=True)
+    word_prefix_matches.sort(key=lambda x: x[1], reverse=True)
     fuzzy_matches.sort(key=lambda x: x[1], reverse=True)
     
     results = []
@@ -80,7 +89,7 @@ async def search_tags(
     for tag, score in substring_matches:
         if len(results) < 10:
             results.append(ArticleTagResponse(id=tag.id, name=tag.name))
-    for tag, score in all_words_match:
+    for tag, score in word_prefix_matches:
         if len(results) < 10:
             results.append(ArticleTagResponse(id=tag.id, name=tag.name))
     for tag, score in fuzzy_matches:
