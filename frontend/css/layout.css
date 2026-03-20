@@ -41,3 +41,22 @@ main.container { /* Specific to the main element with class container */
     align-items: center;
     gap: 10px;
 }
+
+/* Mobile: 480px and below */
+@media (max-width: 480px) {
+    .container {
+        width: 98%;
+        padding-left: 5px;
+        padding-right: 5px;
+    }
+    
+    main.container {
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+    
+    .content-section {
+        padding: 10px;
+        margin-bottom: 15px;
+    }
+}

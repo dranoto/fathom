@@ -115,4 +115,8 @@
         font-size: 0.75em;
         padding: 4px 8px;
     }
+    .results-grid {
+        column-count: 1;
+        padding: 0 5px;
+    }
 }

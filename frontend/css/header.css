@@ -192,3 +192,144 @@
     outline: none;
     border-color: #1abc9c;
 }
+
+.header-row-search {
+    display: none;
+}
+
+#tag-search-input {
+    padding: 8px 12px;
+    border-radius: 5px;
+    border: 1px solid #5d6d7e;
+    background: #2c3e50;
+    color: #ecf0f1;
+    font-size: 0.95em;
+    width: 180px;
+}
+
+#tag-search-input:focus {
+    outline: none;
+    border-color: #1abc9c;
+}
+
+#tag-search-input::placeholder {
+    color: #95a5a6;
+}
+
+/* Mobile: 480px and below */
+@media (max-width: 480px) {
+    .header-row {
+        padding: 6px 8px;
+    }
+    
+    .header-row-main {
+        padding: 8px 10px;
+        justify-content: space-between;
+    }
+    
+    .logo {
+        font-size: 1.2em;
+        position: static;
+        transform: none;
+    }
+    
+    .header-right {
+        position: static;
+    }
+    
+    #user-email {
+        display: none;
+    }
+    
+    .header-row-nav {
+        padding: 8px 10px;
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        gap: 5px;
+    }
+    
+    .header-row-nav .nav-left {
+        flex: 1;
+        gap: 5px;
+        flex-wrap: nowrap;
+    }
+    
+    .header-row-nav .nav-right {
+        display: none;
+    }
+    
+    #nav-main-btn,
+    .view-btn {
+        padding: 8px 12px;
+        font-size: 0.85em;
+        flex: 1;
+        text-align: center;
+    }
+    
+    #feed-filter-select {
+        padding: 8px 10px;
+        font-size: 0.85em;
+        min-width: 0;
+        flex: 1;
+    }
+    
+    .view-buttons {
+        gap: 5px;
+        flex: 1;
+    }
+    
+    #active-tag-filters-display {
+        display: none;
+    }
+    
+    .header-row-search {
+        display: flex;
+        flex-direction: row;
+        gap: 8px;
+        padding: 8px 10px;
+    }
+    
+    .mobile-search-wrapper,
+    .mobile-tag-search-wrapper {
+        flex: 1;
+        display: flex;
+        gap: 5px;
+        position: relative;
+    }
+    
+    .mobile-search-wrapper input,
+    .mobile-tag-search-wrapper input {
+        flex: 1;
+        padding: 8px 10px;
+        border-radius: 5px;
+        border: 1px solid #5d6d7e;
+        background: #2c3e50;
+        color: #ecf0f1;
+        font-size: 0.9em;
+    }
+    
+    .mobile-search-wrapper .nav-button,
+    .mobile-tag-search-wrapper .nav-button {
+        padding: 8px 12px;
+        font-size: 0.85em;
+    }
+    
+    #mobile-tag-search-results {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        margin-top: 5px;
+        background: #2c3e50;
+        border: 1px solid #5d6d7e;
+        border-radius: 5px;
+        max-height: 200px;
+        overflow-y: auto;
+        z-index: 1000;
+        display: none;
+    }
+    
+    #mobile-tag-search-results.visible {
+        display: block;
+    }
+}

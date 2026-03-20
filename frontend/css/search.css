@@ -34,3 +34,26 @@
     background-color: #2980b9;
     border-color: #2980b9;
 }
+
+.tag-search-wrapper {
+    position: relative;
+}
+
+.tag-search-wrapper input {
+    padding: 8px 12px;
+    border-radius: 5px;
+    border: 1px solid #5d6d7e;
+    background: #2c3e50;
+    color: #ecf0f1;
+    font-size: 0.95em;
+    width: 150px;
+}
+
+.tag-search-wrapper input:focus {
+    outline: none;
+    border-color: #1abc9c;
+}
+
+.tag-search-wrapper input::placeholder {
+    color: #95a5a6;
+}

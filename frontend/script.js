@@ -577,6 +577,26 @@ function setupGlobalEventListeners() {
         });
     } else { console.warn("MainScript: Keyword search elements not found."); }
 
+    const mobileSearchInput = document.getElementById('mobile-search-input');
+    const mobileSearchBtn = document.getElementById('mobile-search-btn');
+    if (mobileSearchBtn && mobileSearchInput) {
+        mobileSearchBtn.addEventListener('click', () => {
+            const searchTerm = mobileSearchInput.value.trim();
+            state.setCurrentKeywordSearch(searchTerm || null);
+            state.setActiveFeedFilterIds([]);
+            state.setActiveTagFilterIds([]);
+            state.setActiveView('main');
+            uiManager.updateFeedFilterButtonStyles();
+            uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter, handleClearAllFilters);
+            uiManager.updateNavButtonStyles();
+            state.setCurrentPage(1);
+            fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch);
+        });
+        mobileSearchInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') { event.preventDefault(); mobileSearchBtn.click(); }
+        });
+    }
+
     const feedFilterSelect = document.getElementById('feed-filter-select');
     if (feedFilterSelect) {
         feedFilterSelect.addEventListener('change', () => {
@@ -705,6 +725,72 @@ function setupGlobalEventListeners() {
             if (state.tagSearchResults.length > 0) {
                 state.setIsTagSearchOpen(true);
                 tagSearchResults.classList.add('visible');
+            }
+        });
+    }
+    
+    const mobileTagSearchInput = document.getElementById('mobile-tag-search-input');
+    const mobileTagSearchResults = document.getElementById('mobile-tag-search-results');
+    
+    if (mobileTagSearchInput && mobileTagSearchResults) {
+        let mobileTagSearchDebounceTimer = null;
+        
+        mobileTagSearchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            state.setTagSearchQuery(query);
+            
+            if (mobileTagSearchDebounceTimer) clearTimeout(mobileTagSearchDebounceTimer);
+            
+            if (query.length < 2) {
+                state.setTagSearchResults([]);
+                state.setIsTagSearchOpen(false);
+                mobileTagSearchResults.classList.remove('visible');
+                mobileTagSearchResults.innerHTML = '';
+                return;
+            }
+            
+            mobileTagSearchDebounceTimer = setTimeout(async () => {
+                try {
+                    const results = await apiService.searchTags(query);
+                    state.setTagSearchResults(results);
+                    
+                    if (results.length === 0) {
+                        mobileTagSearchResults.innerHTML = '<div class="tag-search-no-results">No matching tags found</div>';
+                        state.setIsTagSearchOpen(true);
+                        mobileTagSearchResults.classList.add('visible');
+                    } else {
+                        mobileTagSearchResults.innerHTML = results.map(tag => 
+                            `<div class="tag-search-result-item" data-tag-id="${tag.id}" data-tag-name="${tag.name}">${tag.name}</div>`
+                        ).join('');
+                        state.setIsTagSearchOpen(true);
+                        mobileTagSearchResults.classList.add('visible');
+                        
+                        mobileTagSearchResults.querySelectorAll('.tag-search-result-item').forEach(item => {
+                            item.addEventListener('click', () => {
+                                const tagId = parseInt(item.dataset.tagId);
+                                const tagName = item.dataset.tagName;
+                                handleTagSearchSelect(tagId, tagName);
+                            });
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error searching tags:', error);
+                    state.setTagSearchResults([]);
+                }
+            }, 300);
+        });
+        
+        mobileTagSearchInput.addEventListener('blur', () => {
+            setTimeout(() => {
+                state.setIsTagSearchOpen(false);
+                mobileTagSearchResults.classList.remove('visible');
+            }, 200);
+        });
+        
+        mobileTagSearchInput.addEventListener('focus', () => {
+            if (state.tagSearchResults.length > 0) {
+                state.setIsTagSearchOpen(true);
+                mobileTagSearchResults.classList.add('visible');
             }
         });
     }
