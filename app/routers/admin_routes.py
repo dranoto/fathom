@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session as SQLAlchemySession
 
 from .. import database
 from .. import config as app_config
+from ..schemas import UpdateFeedRequest
 from .auth_routes import get_current_user
 
 logger = logging.getLogger(__name__)
@@ -184,7 +185,7 @@ async def add_feed_source(
 @router.put("/feeds/{feed_id}")
 async def update_feed_source(
     feed_id: int,
-    request: AddFeedRequest,
+    request: UpdateFeedRequest,
     db: SQLAlchemySession = Depends(database.get_db),
     admin_user: database.User = Depends(require_admin)
 ):

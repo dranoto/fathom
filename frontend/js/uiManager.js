@@ -537,20 +537,16 @@ export function updateActiveTagFiltersUI(onRemoveTagFilterCallback) {
  * Shows a specific section.
  */
 export function showSection(sectionId) {
-    if (!mainFeedSection || !setupSection) {
-        console.error("UIManager: Main feed or setup section element not found.");
-        return;
-    }
-    mainFeedSection.classList.remove('active');
-    setupSection.classList.remove('active');
+    document.querySelectorAll('.content-section').forEach(section => {
+        section.classList.remove('active');
+    });
 
     const sectionToShow = document.getElementById(sectionId);
     if (sectionToShow) {
         sectionToShow.classList.add('active');
     } else {
         console.error(`UIManager: Section with ID '${sectionId}' not found.`);
-        // Fallback to main feed if something goes wrong
-        mainFeedSection.classList.add('active');
+        if (mainFeedSection) mainFeedSection.classList.add('active');
     }
 
     updateNavButtonStyles();
