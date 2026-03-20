@@ -247,6 +247,34 @@ function handleRemoveTagFilter(tagIdToRemove) {
     fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch);
 }
 
+function handleTagSearchSelect(tagId, tagName) {
+    console.log(`MainScript: Tag search selected - ID: ${tagId}, Name: ${tagName}`);
+    const tagSearchInput = document.getElementById('tag-search-input');
+    const tagSearchResults = document.getElementById('tag-search-results');
+    
+    if (tagSearchInput) tagSearchInput.value = '';
+    if (tagSearchResults) {
+        tagSearchResults.classList.remove('visible');
+        tagSearchResults.innerHTML = '';
+    }
+    state.clearTagSearch();
+    
+    state.addActiveTagFilter({ id: tagId, name: tagName });
+    state.setActiveFeedFilterIds([]);
+    state.setCurrentKeywordSearch(null);
+    state.setActiveView('main');
+    
+    const keywordInput = document.getElementById('keyword-search-input');
+    if (keywordInput) keywordInput.value = '';
+    
+    uiManager.updateFeedFilterButtonStyles();
+    uiManager.updateFeedFilterDropdownSelection();
+    uiManager.updateNavButtonStyles();
+    uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter);
+    state.setCurrentPage(1);
+    fetchAndDisplaySummaries(false, 1, null);
+}
+
 function getSelectedFeedNamesForRefresh() {
     if (state.activeFeedFilterIds.length === 0) return "ALL feeds";
     return state.activeFeedFilterIds
@@ -574,6 +602,73 @@ function setupGlobalEventListeners() {
             fetchAndDisplaySummaries(false, state.currentPage, state.currentKeywordSearch);
         }
     });
+
+    const tagSearchInput = document.getElementById('tag-search-input');
+    const tagSearchResults = document.getElementById('tag-search-results');
+    
+    if (tagSearchInput && tagSearchResults) {
+        let tagSearchDebounceTimer = null;
+        
+        tagSearchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            state.setTagSearchQuery(query);
+            
+            if (tagSearchDebounceTimer) clearTimeout(tagSearchDebounceTimer);
+            
+            if (query.length < 2) {
+                state.setTagSearchResults([]);
+                state.setIsTagSearchOpen(false);
+                tagSearchResults.classList.remove('visible');
+                tagSearchResults.innerHTML = '';
+                return;
+            }
+            
+            tagSearchDebounceTimer = setTimeout(async () => {
+                try {
+                    const results = await apiService.searchTags(query);
+                    state.setTagSearchResults(results);
+                    
+                    if (results.length === 0) {
+                        tagSearchResults.innerHTML = '<div class="tag-search-no-results">No matching tags found</div>';
+                        state.setIsTagSearchOpen(true);
+                        tagSearchResults.classList.add('visible');
+                    } else {
+                        tagSearchResults.innerHTML = results.map(tag => 
+                            `<div class="tag-search-result-item" data-tag-id="${tag.id}" data-tag-name="${tag.name}">${tag.name}</div>`
+                        ).join('');
+                        state.setIsTagSearchOpen(true);
+                        tagSearchResults.classList.add('visible');
+                        
+                        tagSearchResults.querySelectorAll('.tag-search-result-item').forEach(item => {
+                            item.addEventListener('click', () => {
+                                const tagId = parseInt(item.dataset.tagId);
+                                const tagName = item.dataset.tagName;
+                                handleTagSearchSelect(tagId, tagName);
+                            });
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error searching tags:', error);
+                    state.setTagSearchResults([]);
+                }
+            }, 300);
+        });
+        
+        tagSearchInput.addEventListener('blur', () => {
+            setTimeout(() => {
+                state.setIsTagSearchOpen(false);
+                tagSearchResults.classList.remove('visible');
+            }, 200);
+        });
+        
+        tagSearchInput.addEventListener('focus', () => {
+            if (state.tagSearchResults.length > 0) {
+                state.setIsTagSearchOpen(true);
+                tagSearchResults.classList.add('visible');
+            }
+        });
+    }
+    
     console.log("MainScript: Global event listeners set up.");
 }
 

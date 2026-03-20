@@ -51,6 +51,17 @@ def create_db_and_tables():
                     ('tags', 'user_id', 'INTEGER'),
                 ]
 
+                if inspector.has_table("tags"):
+                    columns = inspector.get_columns("tags")
+                    column_names = {c['name'] for c in columns}
+                    if 'normalized_name' not in column_names:
+                        try:
+                            connection.execute(text('ALTER TABLE tags ADD COLUMN normalized_name VARCHAR'))
+                            connection.execute(text("UPDATE tags SET normalized_name = LOWER(TRIM(name)) WHERE normalized_name IS NULL"))
+                            print("DATABASE: Added column 'normalized_name' to 'tags' table.")
+                        except Exception as e:
+                            print(f"DATABASE: Could not add column 'normalized_name' to 'tags': {e}")
+
                 for table_name, column_name, column_type in migration_checks:
                     if inspector.has_table(table_name):
                         columns = inspector.get_columns(table_name)

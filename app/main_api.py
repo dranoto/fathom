@@ -27,7 +27,8 @@ from .routers import (
     content_routes,
     debug_routes,
     auth_routes,
-    user_routes
+    user_routes,
+    tag_routes
 )
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -220,6 +221,7 @@ app.include_router(content_routes.router)
 app.include_router(debug_routes.router)
 app.include_router(auth_routes.router)
 app.include_router(user_routes.router)
+app.include_router(tag_routes.router)
 logger.info("MAIN_API: All API routers included.")
 
 import os

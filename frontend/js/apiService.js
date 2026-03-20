@@ -326,6 +326,14 @@ export async function fetchDeletedArticles() {
     return handleFetch(`${CHAT_API_ENDPOINT_BASE}/articles/deleted`);
 }
 
+export async function fetchUserTags() {
+    return handleFetch('/api/tags');
+}
+
+export async function searchTags(query) {
+    return handleFetch(`/api/tags/search?q=${encodeURIComponent(query)}`);
+}
+
 export async function fetchDebugStatus() {
     return handleFetch('/api/debug/status');
 }

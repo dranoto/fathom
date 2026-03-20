@@ -38,6 +38,11 @@ export let activeTagFilterIds = [];
 export let currentKeywordSearch = null; 
 export let activeView = 'main'; // 'main' or 'favorites'
 
+// --- Tag Search ---
+export let tagSearchQuery = '';
+export let tagSearchResults = [];
+export let isTagSearchOpen = false;
+
 // --- Utility functions to update state ---
 
 export function setDbFeedSources(sources) {
@@ -156,6 +161,24 @@ export function removeLocallyFavoritedArticle(articleId) {
 
 export function isLocallyFavorited(articleId) {
     return locallyFavoritedArticleIds.has(articleId);
+}
+
+export function setTagSearchQuery(query) {
+    tagSearchQuery = typeof query === 'string' ? query.trim() : '';
+}
+
+export function setTagSearchResults(results) {
+    tagSearchResults = Array.isArray(results) ? results : [];
+}
+
+export function setIsTagSearchOpen(isOpen) {
+    isTagSearchOpen = !!isOpen;
+}
+
+export function clearTagSearch() {
+    tagSearchQuery = '';
+    tagSearchResults = [];
+    isTagSearchOpen = false;
 }
 
 console.log("frontend/js/state.js: Module loaded and state initialized.");

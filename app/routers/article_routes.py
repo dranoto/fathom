@@ -16,6 +16,7 @@ from .. import scraper
 from .. import summarizer
 from .. import config as app_config
 from .. import security
+from .. import tag_utils
 from ..schemas import (
     PaginatedSummariesAPIResponse,
     NewsPageQuery,
@@ -474,25 +475,38 @@ async def regenerate_article_summary(
                 database.article_tag_association.c.article_id == article_id
             )
         )
+        
+        existing_tags = db.query(database.Tag).filter(
+            database.Tag.user_id == current_user.id
+        ).all()
+        existing_normalized_names = [t.normalized_name or tag_utils.normalize_tag_name(t.name) for t in existing_tags]
+        
         tag_names_generated = await summarizer.generate_tags_for_text(current_text_content, llm_tag, settings_database.get_setting(settings_db, "tag_prompt", app_config.DEFAULT_TAG_GENERATION_PROMPT))
+        
         if tag_names_generated:
-            for tag_name in tag_names_generated:
-                tag_name_cleaned = tag_name.strip().lower()
+            processed_tags = tag_utils.process_ai_tags_with_fuzzy_matching(tag_names_generated, existing_normalized_names)
+            
+            for tag_name_cleaned in processed_tags:
                 if not tag_name_cleaned:
                     continue
                 tag_db_obj = db.query(database.Tag).filter(
-                    database.Tag.name == tag_name_cleaned,
+                    database.Tag.normalized_name == tag_name_cleaned,
                     database.Tag.user_id == current_user.id
                 ).first()
                 if not tag_db_obj:
                     try:
-                        tag_db_obj = database.Tag(name=tag_name_cleaned, user_id=current_user.id)
+                        original_tag = next((t for t in tag_names_generated if tag_utils.normalize_tag_name(t) == tag_name_cleaned), tag_name_cleaned)
+                        tag_db_obj = database.Tag(
+                            name=original_tag.strip().title() if original_tag else tag_name_cleaned,
+                            normalized_name=tag_name_cleaned,
+                            user_id=current_user.id
+                        )
                         db.add(tag_db_obj)
                         db.flush()
                     except IntegrityError:
                         db.rollback()
                         tag_db_obj = db.query(database.Tag).filter(
-                            database.Tag.name == tag_name_cleaned,
+                            database.Tag.normalized_name == tag_name_cleaned,
                             database.Tag.user_id == current_user.id
                         ).first()
                 if tag_db_obj:

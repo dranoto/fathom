@@ -236,12 +236,14 @@ class Tag(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete='CASCADE'), nullable=False, index=True)
     name = Column(String, index=True, nullable=False)
+    normalized_name = Column(String, index=True, nullable=True)
 
     user = relationship("User", back_populates="tags")
     articles = relationship("Article", secondary=article_tag_association, back_populates="tags")
 
     __table_args__ = (
         UniqueConstraint('user_id', 'name', name='uq_tag_user_name'),
+        UniqueConstraint('user_id', 'normalized_name', name='uq_tag_user_normalized_name'),
     )
 
     def __repr__(self):
