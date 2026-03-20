@@ -192,7 +192,7 @@ async function initializeAppSettings() {
         uiManager.populateFeedFilterDropdown();
         uiManager.initializeFeedFilterDropdown();
 
-        uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter); 
+        uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter, handleClearAllFilters); 
         uiManager.showSection('main-feed-section'); 
 
         if (state.dbFeedSources.length > 0 || state.activeTagFilterIds.length > 0 || state.currentKeywordSearch) {
@@ -233,7 +233,7 @@ function handleArticleTagClick(tagId, tagName) {
     if(keywordInput) keywordInput.value = ''; 
     uiManager.updateFeedFilterButtonStyles();
     uiManager.updateNavButtonStyles();
-    uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter); 
+    uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter, handleClearAllFilters); 
     state.setCurrentPage(1);
     fetchAndDisplaySummaries(false, 1, null); 
 }
@@ -241,10 +241,33 @@ function handleArticleTagClick(tagId, tagName) {
 function handleRemoveTagFilter(tagIdToRemove) {
     console.log(`MainScript: Removing tag filter for ID: ${tagIdToRemove}`);
     state.removeActiveTagFilter(tagIdToRemove);
-    uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter); 
+    uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter, handleClearAllFilters); 
     document.querySelectorAll(`.article-tag[data-tag-id='${tagIdToRemove}']`).forEach(el => el.classList.remove('active-filter-tag'));
     state.setCurrentPage(1);
     fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch);
+}
+
+function handleClearAllFilters() {
+    console.log('MainScript: Clearing all filters');
+    state.activeTagFilterIds = [];
+    state.activeFeedFilterIds = [];
+    state.setCurrentKeywordSearch(null);
+    state.setActiveView('main');
+    
+    const keywordInput = document.getElementById('keyword-search-input');
+    if (keywordInput) keywordInput.value = '';
+    
+    const tagSearchInput = document.getElementById('tag-search-input');
+    if (tagSearchInput) tagSearchInput.value = '';
+    
+    document.querySelectorAll('.article-tag.active-filter-tag').forEach(el => el.classList.remove('active-filter-tag'));
+    
+    uiManager.updateFeedFilterButtonStyles();
+    uiManager.updateFeedFilterDropdownSelection();
+    uiManager.updateNavButtonStyles();
+    uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter, handleClearAllFilters);
+    state.setCurrentPage(1);
+    fetchAndDisplaySummaries(false, 1, null);
 }
 
 function handleTagSearchSelect(tagId, tagName) {
@@ -270,7 +293,7 @@ function handleTagSearchSelect(tagId, tagName) {
     uiManager.updateFeedFilterButtonStyles();
     uiManager.updateFeedFilterDropdownSelection();
     uiManager.updateNavButtonStyles();
-    uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter);
+    uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter, handleClearAllFilters);
     state.setCurrentPage(1);
     fetchAndDisplaySummaries(false, 1, null);
 }
@@ -311,7 +334,7 @@ function handleFeedFilterClick(feedId) {
     uiManager.updateFeedFilterButtonStyles();
     uiManager.updateFeedFilterDropdownSelection();
     uiManager.updateNavButtonStyles();
-    uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter);
+    uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter, handleClearAllFilters);
     state.setCurrentPage(1);
     updateRefreshButtonText();
     fetchAndDisplaySummaries(false, 1, null); 
@@ -527,7 +550,7 @@ function setupGlobalEventListeners() {
             state.setActiveTagFilterIds([]);
             state.setActiveView('main');
             uiManager.updateFeedFilterButtonStyles();
-            uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter);
+            uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter, handleClearAllFilters);
             uiManager.updateNavButtonStyles();
             state.setCurrentPage(1);
             fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch);
@@ -557,7 +580,7 @@ function setupGlobalEventListeners() {
             if(mainSectionTitle) mainSectionTitle.textContent = 'Latest Summaries';
             uiManager.updateFeedFilterButtonStyles();
             uiManager.updateNavButtonStyles();
-            uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter);
+            uiManager.updateActiveTagFiltersUI(handleRemoveTagFilter, handleClearAllFilters);
             state.setCurrentPage(1);
             fetchAndDisplaySummaries(false, 1, null);
         });

@@ -537,7 +537,7 @@ export function updateNavButtonStyles() {
 /**
  * Updates the UI to display active tag filters.
  */
-export function updateActiveTagFiltersUI(onRemoveTagFilterCallback) {
+export function updateActiveTagFiltersUI(onRemoveTagFilterCallback, onClearAllFiltersCallback) {
     if (!activeTagFiltersDisplay) {
         console.warn("UIManager: activeTagFiltersDisplay element not found.");
         return;
@@ -549,7 +549,7 @@ export function updateActiveTagFiltersUI(onRemoveTagFilterCallback) {
     }
     activeTagFiltersDisplay.style.display = 'block';
     const heading = document.createElement('span');
-    heading.textContent = 'Filtered by tags: ';
+    heading.textContent = 'Filtered by: ';
     heading.style.fontWeight = 'bold';
     activeTagFiltersDisplay.appendChild(heading);
     state.activeTagFilterIds.forEach(tagObj => {
@@ -568,6 +568,21 @@ export function updateActiveTagFiltersUI(onRemoveTagFilterCallback) {
         tagSpan.appendChild(removeBtn);
         activeTagFiltersDisplay.appendChild(tagSpan);
     });
+    if (state.activeTagFilterIds.length > 1) {
+        const clearAllBtn = document.createElement('button');
+        clearAllBtn.classList.add('clear-all-filters-btn');
+        clearAllBtn.textContent = 'Clear all';
+        clearAllBtn.style.marginLeft = '10px';
+        clearAllBtn.style.padding = '3px 8px';
+        clearAllBtn.style.fontSize = '0.85em';
+        clearAllBtn.style.cursor = 'pointer';
+        clearAllBtn.onclick = () => {
+            if (onClearAllFiltersCallback && typeof onClearAllFiltersCallback === 'function') {
+                onClearAllFiltersCallback();
+            }
+        };
+        activeTagFiltersDisplay.appendChild(clearAllBtn);
+    }
 }
 
 /**

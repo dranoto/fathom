@@ -139,3 +139,14 @@
 .active-tag-filter .remove-tag-filter-btn:hover {
     color: white;
 }
+.clear-all-filters-btn {
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 15px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.clear-all-filters-btn:hover {
+    background-color: #c0392b;
+}
