@@ -23,7 +23,8 @@
     <link rel="stylesheet" href="/static/css/modals.css">
     <link rel="stylesheet" href="/static/css/setup_page.css">
     <link rel="stylesheet" href="/static/css/footer.css">
-    <link rel="stylesheet" href="/static/css/responsive.css"> 
+    <link rel="stylesheet" href="/static/css/responsive.css">
+    <link rel="stylesheet" href="/static/css/intelligence.css">
 
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@2.3.6/dist/purify.min.js" defer></script>
@@ -57,6 +58,7 @@
                     <div class="view-buttons">
                         <button id="nav-favorites-btn" class="view-btn">Favorites</button>
                         <button id="nav-deleted-btn" class="view-btn">Archived</button>
+                        <button id="nav-intelligence-btn" class="view-btn">Intelligence</button>
                     </div>
                     <div id="active-tag-filters-display" class="active-tag-filters-display"></div>
                 </div>
@@ -97,6 +99,27 @@
                 <div id="infinite-scroll-loading-indicator" class="loading" style="display: none;">
                     <div class="spinner"></div>
                     <span>Loading more articles...</span>
+                </div>
+            </section>
+
+            <section id="intelligence-section" class="content-section">
+                <div class="intelligence-layout">
+                    <div class="intelligence-sidebar">
+                        <h3>My Events</h3>
+                        <button id="btn-add-event" class="submit-button">+ New Event</button>
+                        <div id="event-list" class="event-list"></div>
+                    </div>
+                    <div class="intelligence-main">
+                        <div id="intelligence-event-header" class="intelligence-event-header">
+                            <p class="no-event-selected">Select an event from the sidebar or create a new one.</p>
+                        </div>
+                        <div id="intelligence-timeline" class="intelligence-timeline">
+                        </div>
+                        <div id="intelligence-summary" class="intelligence-summary">
+                        </div>
+                        <div id="intelligence-chat" class="intelligence-chat">
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -340,6 +363,32 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div id="add-event-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="close-button" id="close-add-event-modal">&times;</span>
+            <h3>Create New Event</h3>
+            <form id="add-event-form">
+                <div class="form-group">
+                    <label for="event-name-input">Event Name:</label>
+                    <input type="text" id="event-name-input" placeholder="e.g., War with Iran" required>
+                </div>
+                <div class="form-group">
+                    <label for="event-desc-input">Description (optional):</label>
+                    <input type="text" id="event-desc-input" placeholder="Brief description of this event">
+                </div>
+                <div class="form-group">
+                    <label for="event-article-search">Search Articles to Add:</label>
+                    <input type="text" id="event-article-search" placeholder="Type to search your articles...">
+                    <div id="event-search-results" class="event-search-results"></div>
+                </div>
+                <div class="form-buttons">
+                    <button type="button" id="btn-cancel-event" class="cancel-button">Cancel</button>
+                    <button type="button" id="btn-create-event" class="submit-button">Create Event</button>
+                </div>
+            </form>
         </div>
     </div>
 

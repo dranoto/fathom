@@ -2,6 +2,7 @@
 import * as state from './state.js';
 import * as apiService from './apiService.js'; 
 import * as chatHandler from './chatHandler.js';
+import * as eventApi from './intelligence/eventApiService.js';
 
 /**
  * This module is responsible for all direct UI manipulations,
@@ -440,6 +441,17 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
             }
         };
         actionsRow.appendChild(favoriteBtn);
+
+        // Add to Event button
+        const addToEventBtn = document.createElement('button');
+        addToEventBtn.classList.add('add-to-event-btn');
+        addToEventBtn.title = "Add to Event";
+        addToEventBtn.innerHTML = '&#9978;';
+        addToEventBtn.onclick = (e) => {
+            e.stopPropagation();
+            showAddToEventDropdown(article.id, addToEventBtn);
+        };
+        actionsRow.appendChild(addToEventBtn);
 
         articleCard.appendChild(actionsRow);
 
@@ -893,6 +905,72 @@ export function setResultsContainerContent(htmlContent) {
         resultsContainer.innerHTML = htmlContent;
     } else {
         console.error("UIManager: resultsContainer not found, cannot set content.");
+    }
+}
+
+let activeAddToEventDropdown = null;
+
+export async function showAddToEventDropdown(articleId, buttonElement) {
+    closeAddToEventDropdown();
+
+    try {
+        const events = await eventApi.fetchEvents();
+
+        const dropdown = document.createElement('div');
+        dropdown.className = 'add-to-event-dropdown';
+        dropdown.innerHTML = '<div class="dropdown-header">Add to Event</div>';
+
+        if (events.length === 0) {
+            dropdown.innerHTML += '<div class="dropdown-empty">No events yet. Create one in Intelligence.</div>';
+        } else {
+            events.forEach(event => {
+                const item = document.createElement('div');
+                item.className = 'dropdown-item';
+                item.textContent = event.name;
+                item.onclick = async () => {
+                    try {
+                        await eventApi.addArticlesToEvent(event.id, [articleId]);
+                        showToast(`Added to "${event.name}"`, 'success');
+                    } catch (error) {
+                        console.error('Error adding article to event:', error);
+                        showToast('Failed to add article to event', 'error');
+                    }
+                    closeAddToEventDropdown();
+                };
+                dropdown.appendChild(item);
+            });
+        }
+
+        const rect = buttonElement.getBoundingClientRect();
+        dropdown.style.position = 'absolute';
+        dropdown.style.top = `${rect.bottom + window.scrollY + 5}px`;
+        dropdown.style.left = `${rect.left + window.scrollX}px`;
+        dropdown.style.zIndex = '1000';
+
+        document.body.appendChild(dropdown);
+        activeAddToEventDropdown = dropdown;
+
+        setTimeout(() => {
+            document.addEventListener('click', closeAddToEventDropdownOnClickOutside, { once: true });
+        }, 0);
+
+    } catch (error) {
+        console.error('Error fetching events for dropdown:', error);
+        showToast('Failed to load events', 'error');
+    }
+}
+
+function closeAddToEventDropdownOnClickOutside(event) {
+    const dropdown = document.querySelector('.add-to-event-dropdown');
+    if (dropdown && !dropdown.contains(event.target) && !event.target.classList.contains('add-to-event-btn')) {
+        closeAddToEventDropdown();
+    }
+}
+
+export function closeAddToEventDropdown() {
+    if (activeAddToEventDropdown) {
+        activeAddToEventDropdown.remove();
+        activeAddToEventDropdown = null;
     }
 }
 

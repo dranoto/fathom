@@ -2,11 +2,10 @@
 import json
 import logging
 from typing import List, Dict, Any, Optional
-from langchain.schema import HumanMessage
+from langchain_core.messages import HumanMessage
+from langchain_openai import ChatOpenAI
 
-from app.summarizer import get_llm_summary
-from app import config as app_config
-import settings_database
+from app import config as app_config, settings_database
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +47,12 @@ async def generate_major_summary(
     event_name: str,
     articles: List[Dict[str, Any]],
     prompt_template: str,
-    prior_summary_json: Optional[Dict[str, Any]] = None
+    prior_summary_json: Optional[Dict[str, Any]] = None,
+    llm: Optional[ChatOpenAI] = None
 ) -> Dict[str, Any]:
+    if not llm:
+        raise RuntimeError("Summary LLM not available")
+    
     article_texts_parts = []
     seen_urls = set()
     
@@ -74,10 +77,6 @@ async def generate_major_summary(
         )
     
     article_texts = "\n".join(article_texts_parts)
-    
-    llm = get_llm_summary()
-    if not llm:
-        raise RuntimeError("Summary LLM not available")
     
     prompt = build_major_summary_prompt(event_name, article_texts, prompt_template, prior_summary_json)
     

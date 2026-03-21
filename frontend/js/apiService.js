@@ -78,21 +78,26 @@ async function handleFetch(url, options = {}) {
                 const errorData = await response.json();
                 errorDetail = errorData.detail || JSON.stringify(errorData) || errorDetail;
             } catch (e) {
-                try { errorDetail = await response.text() || errorDetail; } catch (e_text) { /* Fallback */ }
+                // Ignore JSON parse errors for error responses
             }
-            console.error(`API Service: Fetch error for ${url} - ${errorDetail}`);
             throw new Error(errorDetail);
         }
+        
         if (response.status === 204) {
-            console.log(`API Service: Received 204 No Content for ${url}`);
             return null;
         }
-        return response.json();
+        
+        return await response.json();
     } catch (error) {
-        console.error(`API Service: Network or unexpected error for ${url}: ${error.message}`, error);
+        if (error.message === 'Unauthorized - please log in again') {
+            throw error;
+        }
+        console.error(`API Service Error for ${url}:`, error);
         throw error;
     }
 }
+
+export { handleFetch as fetchWithAuth };
 
 export async function login(email, password) {
     const response = await handleFetch('/api/auth/login', {

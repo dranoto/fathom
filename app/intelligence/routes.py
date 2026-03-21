@@ -1,6 +1,6 @@
 # app/intelligence/routes.py
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session as SQLAlchemySession
 from sqlalchemy import or_, desc, func
 from typing import List, Optional
@@ -8,7 +8,8 @@ from typing import List, Optional
 from app import database, settings_database
 from app import config as app_config
 from app.routers.auth_routes import get_current_user
-from app.routers.article_routes import get_user_feed_source_ids
+from app.security import get_user_feed_source_ids
+from app.dependencies import get_llm_summary
 from app.intelligence.models import Event, ArticleEvent, EventSummary
 from app.intelligence.schemas import (
     EventCreate, EventUpdate, EventResponse, EventDetailResponse,
@@ -42,19 +43,31 @@ async def list_events(
 ):
     events = db.query(Event).filter(Event.user_id == current_user.id).order_by(desc(Event.created_at)).all()
     
+    if not events:
+        return []
+    
+    event_ids = [e.id for e in events]
+    
+    article_counts = dict(
+        db.query(ArticleEvent.event_id, func.count(ArticleEvent.article_id))
+        .filter(ArticleEvent.event_id.in_(event_ids))
+        .group_by(ArticleEvent.event_id)
+        .all()
+    )
+    
+    feed_counts = dict(
+        db.query(ArticleEvent.event_id, func.count(func.distinct(database.Article.feed_source_id)))
+        .join(database.Article, ArticleEvent.article_id == database.Article.id)
+        .filter(
+            ArticleEvent.event_id.in_(event_ids),
+            database.Article.feed_source_id.isnot(None)
+        )
+        .group_by(ArticleEvent.event_id)
+        .all()
+    )
+    
     result = []
     for event in events:
-        article_count = db.query(func.count(ArticleEvent.article_id)).filter(
-            ArticleEvent.event_id == event.id
-        ).scalar() or 0
-        
-        feed_count = db.query(func.count(func.distinct(database.Article.feed_source_id))).join(
-            ArticleEvent, ArticleEvent.article_id == database.Article.id
-        ).filter(
-            ArticleEvent.event_id == event.id,
-            database.Article.feed_source_id.isnot(None)
-        ).scalar() or 0
-        
         result.append(EventResponse(
             id=event.id,
             user_id=event.user_id,
@@ -62,8 +75,8 @@ async def list_events(
             description=event.description,
             status=event.status,
             created_at=event.created_at,
-            article_count=article_count,
-            feed_count=feed_count
+            article_count=article_counts.get(event.id, 0),
+            feed_count=feed_counts.get(event.id, 0)
         ))
     
     return result
@@ -100,6 +113,42 @@ async def create_event(
         article_count=0,
         feed_count=0
     )
+    
+
+@router.get("/search/articles", response_model=List[ArticleSearchResult])
+async def search_articles_for_event(
+    keyword: str = Query(..., min_length=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: database.User = Depends(get_current_user),
+    db: SQLAlchemySession = Depends(database.get_db)
+):
+    user_feed_source_ids = get_user_feed_source_ids(db, current_user.id)
+    
+    if not user_feed_source_ids:
+        return []
+    
+    search_term = f"%{keyword}%"
+    
+    articles = db.query(database.Article).filter(
+        database.Article.feed_source_id.in_(user_feed_source_ids),
+        or_(
+            database.Article.title.ilike(search_term),
+            database.Article.scraped_text_content.ilike(search_term),
+            database.Article.rss_description.ilike(search_term)
+        )
+    ).order_by(desc(database.Article.published_date)).limit(limit).all()
+    
+    return [
+        ArticleSearchResult(
+            id=a.id,
+            title=a.title,
+            publisher_name=a.publisher_name,
+            published_date=a.published_date,
+            url=a.url,
+            word_count=a.word_count
+        )
+        for a in articles
+    ]
 
 
 @router.get("/{event_id}", response_model=EventDetailResponse)
@@ -110,25 +159,25 @@ async def get_event(
 ):
     event = get_event_or_404(db, event_id, current_user.id)
     
-    article_events = db.query(ArticleEvent).filter(
-        ArticleEvent.event_id == event_id
-    ).order_by(desc(database.Article.published_date)).all()
+    article_events = (
+        db.query(ArticleEvent, database.Article)
+        .join(database.Article, ArticleEvent.article_id == database.Article.id)
+        .filter(ArticleEvent.event_id == event_id)
+        .order_by(desc(database.Article.published_date))
+        .all()
+    )
     
     articles = []
-    for ae in article_events:
-        article = db.query(database.Article).filter(
-            database.Article.id == ae.article_id
-        ).first()
-        if article:
-            articles.append(ArticleInEvent(
-                id=article.id,
-                title=article.title,
-                publisher_name=article.publisher_name,
-                published_date=article.published_date,
-                url=article.url,
-                word_count=article.word_count,
-                added_at=ae.added_at
-            ))
+    for ae, article in article_events:
+        articles.append(ArticleInEvent(
+            id=article.id,
+            title=article.title,
+            publisher_name=article.publisher_name,
+            published_date=article.published_date,
+            url=article.url,
+            word_count=article.word_count,
+            added_at=ae.added_at
+        ))
     
     latest_summary = db.query(EventSummary).filter(
         EventSummary.event_id == event_id
@@ -178,6 +227,13 @@ async def update_event(
         ArticleEvent.event_id == event_id
     ).scalar() or 0
     
+    feed_count = db.query(func.count(func.distinct(database.Article.feed_source_id))).join(
+        ArticleEvent, ArticleEvent.article_id == database.Article.id
+    ).filter(
+        ArticleEvent.event_id == event_id,
+        database.Article.feed_source_id.isnot(None)
+    ).scalar() or 0
+    
     return EventResponse(
         id=event.id,
         user_id=event.user_id,
@@ -186,7 +242,7 @@ async def update_event(
         status=event.status,
         created_at=event.created_at,
         article_count=article_count,
-        feed_count=0
+        feed_count=feed_count
     )
 
 
@@ -217,25 +273,25 @@ async def get_event_articles(
 ):
     get_event_or_404(db, event_id, current_user.id)
     
-    article_events = db.query(ArticleEvent).filter(
-        ArticleEvent.event_id == event_id
-    ).order_by(desc(database.Article.published_date)).all()
+    article_events = (
+        db.query(ArticleEvent, database.Article)
+        .join(database.Article, ArticleEvent.article_id == database.Article.id)
+        .filter(ArticleEvent.event_id == event_id)
+        .order_by(desc(database.Article.published_date))
+        .all()
+    )
     
     articles = []
-    for ae in article_events:
-        article = db.query(database.Article).filter(
-            database.Article.id == ae.article_id
-        ).first()
-        if article:
-            articles.append(ArticleInEvent(
-                id=article.id,
-                title=article.title,
-                publisher_name=article.publisher_name,
-                published_date=article.published_date,
-                url=article.url,
-                word_count=article.word_count,
-                added_at=ae.added_at
-            ))
+    for ae, article in article_events:
+        articles.append(ArticleInEvent(
+            id=article.id,
+            title=article.title,
+            publisher_name=article.publisher_name,
+            published_date=article.published_date,
+            url=article.url,
+            word_count=article.word_count,
+            added_at=ae.added_at
+        ))
     
     return articles
 
@@ -311,34 +367,35 @@ async def remove_article_from_event(
 @router.post("/{event_id}/summary", response_model=EventSummaryResponse)
 async def generate_event_summary(
     event_id: int,
+    request: Request,
     current_user: database.User = Depends(get_current_user),
     db: SQLAlchemySession = Depends(database.get_db)
 ):
     event = get_event_or_404(db, event_id, current_user.id)
     
-    article_events = db.query(ArticleEvent).filter(
-        ArticleEvent.event_id == event_id
-    ).order_by(desc(database.Article.published_date)).all()
+    article_events = (
+        db.query(ArticleEvent, database.Article)
+        .join(database.Article, ArticleEvent.article_id == database.Article.id)
+        .filter(ArticleEvent.event_id == event_id)
+        .order_by(desc(database.Article.published_date))
+        .all()
+    )
     
     if not article_events:
         raise HTTPException(status_code=400, detail="No articles in event")
     
     articles_data = []
-    for ae in article_events:
-        article = db.query(database.Article).filter(
-            database.Article.id == ae.article_id
-        ).first()
-        if article:
-            articles_data.append({
-                "id": article.id,
-                "title": article.title,
-                "publisher_name": article.publisher_name,
-                "published_date": article.published_date.isoformat() if article.published_date else None,
-                "url": article.url,
-                "word_count": article.word_count,
-                "scraped_text_content": article.scraped_text_content,
-                "rss_description": article.rss_description
-            })
+    for ae, article in article_events:
+        articles_data.append({
+            "id": article.id,
+            "title": article.title,
+            "publisher_name": article.publisher_name,
+            "published_date": article.published_date.isoformat() if article.published_date else None,
+            "url": article.url,
+            "word_count": article.word_count,
+            "scraped_text_content": article.scraped_text_content,
+            "rss_description": article.rss_description
+        })
     
     prior_summary = db.query(EventSummary).filter(
         EventSummary.event_id == event_id
@@ -351,11 +408,13 @@ async def generate_event_summary(
     )
     
     try:
+        llm = get_llm_summary(request)
         summary_json = await generate_major_summary(
             event_name=event.name,
             articles=articles_data,
             prompt_template=major_summary_prompt,
-            prior_summary_json=prior_json
+            prior_summary_json=prior_json,
+            llm=llm
         )
     except Exception as e:
         logger.error(f"Error generating major summary: {e}", exc_info=True)
@@ -409,42 +468,6 @@ async def get_event_summary(
     )
 
 
-@router.get("/search/articles", response_model=List[ArticleSearchResult])
-async def search_articles_for_event(
-    keyword: str = Query(..., min_length=1),
-    limit: int = Query(20, ge=1, le=100),
-    current_user: database.User = Depends(get_current_user),
-    db: SQLAlchemySession = Depends(database.get_db)
-):
-    user_feed_source_ids = get_user_feed_source_ids(db, current_user.id)
-    
-    if not user_feed_source_ids:
-        return []
-    
-    search_term = f"%{keyword}%"
-    
-    articles = db.query(database.Article).filter(
-        database.Article.feed_source_id.in_(user_feed_source_ids),
-        or_(
-            database.Article.title.ilike(search_term),
-            database.Article.scraped_text_content.ilike(search_term),
-            database.Article.rss_description.ilike(search_term)
-        )
-    ).order_by(desc(database.Article.published_date)).limit(limit).all()
-    
-    return [
-        ArticleSearchResult(
-            id=a.id,
-            title=a.title,
-            publisher_name=a.publisher_name,
-            published_date=a.published_date,
-            url=a.url,
-            word_count=a.word_count
-        )
-        for a in articles
-    ]
-
-
 @router.post("/{event_id}/chat", response_model=EventChatResponse)
 async def chat_about_event(
     event_id: int,
@@ -454,28 +477,29 @@ async def chat_about_event(
 ):
     event = get_event_or_404(db, event_id, current_user.id)
     
-    article_events = db.query(ArticleEvent).filter(
-        ArticleEvent.event_id == event_id
-    ).order_by(desc(database.Article.published_date)).limit(20).all()
+    article_events = (
+        db.query(ArticleEvent, database.Article)
+        .join(database.Article, ArticleEvent.article_id == database.Article.id)
+        .filter(ArticleEvent.event_id == event_id)
+        .order_by(desc(database.Article.published_date))
+        .limit(20)
+        .all()
+    )
     
     if not article_events:
         raise HTTPException(status_code=400, detail="No articles in event")
     
     articles_data = []
-    for ae in article_events:
-        article = db.query(database.Article).filter(
-            database.Article.id == ae.article_id
-        ).first()
-        if article:
-            content = article.scraped_text_content or article.rss_description or ""
-            excerpt = content[:3000] + "..." if len(content) > 3000 else content
-            articles_data.append({
-                "id": article.id,
-                "title": article.title,
-                "publisher_name": article.publisher_name,
-                "url": article.url,
-                "content": excerpt
-            })
+    for ae, article in article_events:
+        content = article.scraped_text_content or article.rss_description or ""
+        excerpt = content[:3000] + "..." if len(content) > 3000 else content
+        articles_data.append({
+            "id": article.id,
+            "title": article.title,
+            "publisher_name": article.publisher_name,
+            "url": article.url,
+            "content": excerpt
+        })
     
     articles_context = "\n\n".join([
         f"--- {a['title']} ({a['publisher_name']}) ---\n{a['content']}"

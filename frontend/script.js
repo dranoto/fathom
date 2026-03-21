@@ -6,6 +6,7 @@ import * as uiManager from './js/uiManager.js';
 import * as chatHandler from './js/chatHandler.js';
 import * as feedHandler from './js/feedHandler.js';
 import { initDebugManager, showDebugPanel } from './js/debugManager.js';
+import * as eventManager from './js/intelligence/eventManager.js';
 
 /**
  * Main script for the NewsAI frontend.
@@ -558,6 +559,17 @@ function setupGlobalEventListeners() {
                 uiManager.updateNavButtonStyles();
                 loadArchivedArticles();
             }
+        });
+    }
+
+    const navIntelligenceBtn = document.getElementById('nav-intelligence-btn');
+    if (navIntelligenceBtn) {
+        navIntelligenceBtn.addEventListener('click', async () => {
+            console.log('Intelligence button clicked');
+            state.setActiveView('intelligence');
+            uiManager.showSection('intelligence-section');
+            uiManager.updateNavButtonStyles();
+            await eventManager.initIntelligenceView();
         });
     }
 
