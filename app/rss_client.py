@@ -260,6 +260,34 @@ async def fetch_and_store_articles_from_feed(db: Session, feed_source: FeedSourc
     return new_articles_count
 
 
+async def _process_single_feed(feed_id: int) -> tuple[int, Optional[str]]:
+    """Process a single feed with its own DB session. Returns (count, error_msg)."""
+    from .database import SessionLocal
+    
+    db = SessionLocal()
+    try:
+        feed_source = db.query(FeedSource).filter(FeedSource.id == feed_id).first()
+        if not feed_source:
+            return 0, f"Feed ID {feed_id} not found"
+        
+        newly_added = await fetch_and_store_articles_from_feed(db, feed_source)
+        db.commit()
+        return newly_added, None
+    except Exception as e:
+        db.rollback()
+        try:
+            feed_source = db.query(FeedSource).filter(FeedSource.id == feed_id).first()
+            if feed_source:
+                feed_source.last_fetched_at = datetime.now(timezone.utc)
+                db.add(feed_source)
+                db.commit()
+        except Exception:
+            db.rollback()
+        return 0, str(e)
+    finally:
+        db.close()
+
+
 async def update_all_subscribed_feeds(db: Session):
     logger.info("RSS_CLIENT_SCHEDULER: Starting update for all subscribed feeds...")
     now_aware = datetime.now(timezone.utc) 
@@ -277,45 +305,34 @@ async def update_all_subscribed_feeds(db: Session):
                 logger.warning(f"RSS_CLIENT_SCHEDULER: Warning - Feed '{feed.name}' (ID: {feed.id}) has an offset-naive last_fetched_at ('{last_fetched_aware}'). Assuming UTC.")
                 last_fetched_aware = last_fetched_aware.replace(tzinfo=timezone.utc)
             
-            fetch_time_cutoff = now_aware - timedelta(minutes=feed.fetch_interval_minutes)  # type: ignore - SQLAlchemy Column
-            if last_fetched_aware < fetch_time_cutoff:  # type: ignore - SQLAlchemy Column
+            fetch_time_cutoff = now_aware - timedelta(minutes=feed.fetch_interval_minutes)
+            if last_fetched_aware < fetch_time_cutoff:
                 should_fetch = True
                 logger.info(f"RSS_CLIENT_SCHEDULER: Feed '{feed.name}' (ID: {feed.id}) due for update. Last fetched: {last_fetched_aware}, Cutoff: {fetch_time_cutoff}. Adding to queue.")
         
         if should_fetch:
-            feeds_to_update.append(feed)
+            feeds_to_update.append(feed.id)
 
     if not feeds_to_update:
         logger.info("RSS_CLIENT_SCHEDULER: No feeds currently due for update.")
         return
 
     logger.info(f"RSS_CLIENT_SCHEDULER: Found {len(feeds_to_update)} feeds to update.")
+    
+    semaphore = asyncio.Semaphore(5)
+    
+    async def sem_process(feed_id: int) -> tuple[int, Optional[str]]:
+        async with semaphore:
+            return await _process_single_feed(feed_id)
+    
+    results = await asyncio.gather(*[sem_process(fid) for fid in feeds_to_update])
+    
     total_new_articles_overall = 0
-    for feed_source in feeds_to_update:
-        try:
-            newly_added_for_this_feed = await fetch_and_store_articles_from_feed(db, feed_source)
-            # The commit now happens after each feed_source is processed successfully
-            db.commit() 
-            total_new_articles_overall += newly_added_for_this_feed
-            logger.info(f"RSS_CLIENT_SCHEDULER: Successfully processed and committed feed '{feed_source.name}'. Added {newly_added_for_this_feed} articles.")
-        except Exception as e:
-            db.rollback() 
-            logger.error(f"RSS_CLIENT_SCHEDULER: Error processing feed {feed_source.url}: {e}. Rolled back changes for this feed.", exc_info=True)
-            try:
-                # Re-fetch the feed_source object in case its state is affected by the rollback,
-                # or if it became detached from the session.
-                feed_to_update_ts = db.query(FeedSource).filter(FeedSource.id == feed_source.id).first()
-                if feed_to_update_ts:
-                    feed_to_update_ts.last_fetched_at = datetime.now(timezone.utc)  # type: ignore - SQLAlchemy descriptor
-                    db.add(feed_to_update_ts)
-                    db.commit() 
-                    logger.info(f"RSS_CLIENT_SCHEDULER: Updated last_fetched_at for errored feed {feed_source.url}.")
-                else:
-                    logger.error(f"RSS_CLIENT_SCHEDULER: Could not find feed ID {feed_source.id} to update its timestamp after an error.")
-            except Exception as e_ts:
-                db.rollback() 
-                logger.error(f"RSS_CLIENT_SCHEDULER: Critical error updating timestamp for errored feed {feed_source.url}: {e_ts}", exc_info=True)
-
+    for (newly_added, error_msg) in results:
+        total_new_articles_overall += newly_added
+        if error_msg:
+            logger.error(f"RSS_CLIENT_SCHEDULER: Error processing feed: {error_msg}")
+    
     logger.info(f"RSS_CLIENT_SCHEDULER: Finished feed update cycle. Total new articles committed across all feeds: {total_new_articles_overall}.")
 
 async def update_single_feed(db: Session, feed_id: int):

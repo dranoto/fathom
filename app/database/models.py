@@ -94,6 +94,10 @@ class UserArticleState(Base):
     user = relationship("User", back_populates="article_states")
     article = relationship("Article", back_populates="user_article_states")
 
+    __table_args__ = (
+        Index('ix_user_article_states_user_article', 'user_id', 'article_id'),
+    )
+
     def __repr__(self):
         return f"<UserArticleState(user_id={self.user_id}, article_id={self.article_id}, read={self.is_read}, fav={self.is_favorite})>"
 
@@ -134,7 +138,8 @@ class UserSettings(Base):
 article_tag_association = Table('article_tag_association', Base.metadata,
     Column('user_id', Integer, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
     Column('article_id', Integer, ForeignKey('articles.id', ondelete='CASCADE'), primary_key=True),
-    Column('tag_id', Integer, ForeignKey('tags.id', ondelete='CASCADE'), primary_key=True)
+    Column('tag_id', Integer, ForeignKey('tags.id', ondelete='CASCADE'), primary_key=True),
+    Index('ix_article_tag_assoc_user_article', 'user_id', 'article_id')
 )
 
 class FeedSource(Base):
@@ -158,7 +163,7 @@ class Article(Base):
     __tablename__ = "articles"
 
     id = Column(Integer, primary_key=True, index=True)
-    feed_source_id = Column(Integer, ForeignKey("feed_sources.id"), nullable=True)
+    feed_source_id = Column(Integer, ForeignKey("feed_sources.id"), nullable=True, index=True)
 
     url = Column(String, unique=True, index=True, nullable=False)
     title = Column(String, nullable=True)
@@ -205,6 +210,7 @@ class Summary(Base):
 
     __table_args__ = (
         UniqueConstraint('user_id', 'article_id', name='uq_summary_user_article'),
+        Index('ix_summaries_user_article', 'user_id', 'article_id'),
     )
 
     def __repr__(self):
@@ -226,6 +232,10 @@ class ChatHistory(Base):
 
     user = relationship("User", back_populates="chat_history")
     article = relationship("Article", back_populates="chat_history")
+
+    __table_args__ = (
+        Index('ix_chat_history_user_article', 'user_id', 'article_id'),
+    )
 
     def __repr__(self):
         return f"<ChatHistory(id={self.id}, user_id={self.user_id}, article_id={self.article_id})>"

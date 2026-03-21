@@ -1,4 +1,5 @@
 # app/routers/article_routes.py
+import asyncio
 import logging
 import math
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -319,49 +320,80 @@ async def get_news_summaries_endpoint(
 
     if articles_needing_ondemand_scrape:
         logger.info(f"API: Found {len(articles_needing_ondemand_scrape)} articles for on-demand scraping on current page.")
-        for art_db_obj_to_process in articles_needing_ondemand_scrape:
-            logger.info(f"API: On-demand scraping for {art_db_obj_to_process.url[:70]}...")
-            scraped_docs_list_od: List[LangchainDocument] = await scraper.scrape_urls([str(art_db_obj_to_process.url)])
-            scraper_error_msg_od = None
-            if scraped_docs_list_od and scraped_docs_list_od[0]:
-                sc_doc_od = scraped_docs_list_od[0]
-                scraper_error_msg_od = sc_doc_od.metadata.get("error")
-                if not scraper_error_msg_od and sc_doc_od.page_content:
-                    art_db_obj_to_process.scraped_text_content = sc_doc_od.page_content
-                    art_db_obj_to_process.full_html_content = sc_doc_od.metadata.get('full_html_content')
-                    art_db_obj_to_process.word_count = sc_doc_od.metadata.get('word_count', 0)
+        
+        semaphore = asyncio.Semaphore(3)
+        
+        async def scrape_and_update(art_db_obj: database.Article) -> tuple[int, dict]:
+            async with semaphore:
+                logger.info(f"API: On-demand scraping for {art_db_obj.url[:70]}...")
+                scraped_docs_list_od: List[LangchainDocument] = await scraper.scrape_urls([str(art_db_obj.url)])
+                
+                scraped_text = None
+                full_html = None
+                word_count = 0
+                error_msg = None
+                
+                if scraped_docs_list_od and scraped_docs_list_od[0]:
+                    sc_doc_od = scraped_docs_list_od[0]
+                    error_msg = sc_doc_od.metadata.get("error")
+                    if not error_msg and sc_doc_od.page_content:
+                        scraped_text = sc_doc_od.page_content
+                        full_html = sc_doc_od.metadata.get('full_html_content')
+                        word_count = sc_doc_od.metadata.get('word_count', 0)
+                    else:
+                        error_msg = error_msg or "On-demand scraper returned no page_content."
+                        scraped_text = f"{SCRAPING_ERROR_PREFIX} {error_msg}"
+                        full_html = None
+                        word_count = 0
                 else:
-                    scraper_error_msg_od = scraper_error_msg_od or "On-demand scraper returned no page_content."
-                    art_db_obj_to_process.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_od}"
-                    art_db_obj_to_process.full_html_content = None
-                    art_db_obj_to_process.word_count = 0
-            else:
-                scraper_error_msg_od = "On-demand scraping: No document returned."
-                art_db_obj_to_process.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_od}"
-                art_db_obj_to_process.full_html_content = None
-                art_db_obj_to_process.word_count = 0
+                    error_msg = "On-demand scraping: No document returned."
+                    scraped_text = f"{SCRAPING_ERROR_PREFIX} {error_msg}"
+                    full_html = None
+                    word_count = 0
+                
+                return art_db_obj.id, {
+                    "scraped_text": scraped_text,
+                    "full_html": full_html,
+                    "word_count": word_count,
+                    "error_msg": error_msg
+                }
+        
+        scrape_tasks = [scrape_and_update(art) for art in articles_needing_ondemand_scrape]
+        scrape_results = await asyncio.gather(*scrape_tasks)
+        
+        article_updates = {art_id: data for art_id, data in scrape_results}
+        
+        for art_db_obj_to_process in articles_needing_ondemand_scrape:
+            art_id = art_db_obj_to_process.id
+            update_data = article_updates.get(art_id, {})
+            
+            art_db_obj_to_process.scraped_text_content = update_data.get("scraped_text")
+            art_db_obj_to_process.full_html_content = update_data.get("full_html")
+            art_db_obj_to_process.word_count = update_data.get("word_count", 0)
+            
             db.add(art_db_obj_to_process)
             try:
                 db.commit()
                 db.refresh(art_db_obj_to_process)
             except Exception as e:
                 db.rollback()
-                logger.error(f"Error committing on-demand scrape for article {art_db_obj_to_process.id}: {e}", exc_info=True)
+                logger.error(f"Error committing on-demand scrape for article {art_id}: {e}", exc_info=True)
             
             for i, res_art in enumerate(results_on_page):
-                if res_art.id == art_db_obj_to_process.id:
+                if res_art.id == art_id:
                     error_parts_for_display = []
-                    if art_db_obj_to_process.scraped_text_content and art_db_obj_to_process.scraped_text_content.startswith(SCRAPING_ERROR_PREFIX):
-                        error_parts_for_display.append(art_db_obj_to_process.scraped_text_content)
-                    elif art_db_obj_to_process.word_count is not None and art_db_obj_to_process.word_count < min_word_count_threshold:
-                        error_parts_for_display.append(f"Content scraped but found to be very short (word count: {art_db_obj_to_process.word_count}).")
+                    scraped_text = update_data.get("scraped_text", "")
+                    if scraped_text and scraped_text.startswith(SCRAPING_ERROR_PREFIX):
+                        error_parts_for_display.append(scraped_text)
+                    elif update_data.get("word_count", 0) is not None and update_data.get("word_count", 0) < min_word_count_threshold:
+                        error_parts_for_display.append(f"Content scraped but found to be very short (word count: {update_data.get('word_count', 0)}).")
 
                     results_on_page[i] = article_helpers._create_article_result(
                         article_db_obj=art_db_obj_to_process,
                         db=db,
                         min_word_count_threshold=min_word_count_threshold,
                         user_id=current_user.id,
-                        summary_text=summaries_map.get(art_db_obj_to_process.id),
+                        summary_text=summaries_map.get(art_id),
                         error_message=" | ".join(error_parts_for_display) if error_parts_for_display else None,
                         user_favorite_ids=user_favorite_ids,
                         user_read_ids=user_read_ids,
@@ -818,54 +850,14 @@ async def permanent_delete_article(
     return {"message": "Article permanently deleted", "article_id": article_id}
 
 
-@router.post("/bulk-mark-read")
-async def bulk_mark_read(
-    article_ids: List[int],
-    current_user: database.User = Depends(get_current_user),
-    db: SQLAlchemySession = Depends(database.get_db)
-):
-    """Mark multiple articles as read for the current user."""
-    feed_source_id_set = security.get_user_feed_source_ids(db, current_user.id)
-    if not feed_source_id_set:
-        return {"message": "No feeds found", "count": 0}
-    
-    valid_article_ids = db.query(database.Article.id).filter(
-        database.Article.id.in_(article_ids),
-        database.Article.feed_source_id.in_(feed_source_id_set)
-    ).all()
-    valid_article_ids_set = {a[0] for a in valid_article_ids}
-    
-    for article_id in article_ids:
-        if article_id not in valid_article_ids_set:
-            continue
-        user_state = db.query(database.UserArticleState).filter(
-            database.UserArticleState.user_id == current_user.id,
-            database.UserArticleState.article_id == article_id
-        ).first()
-        
-        if user_state:
-            user_state.is_read = True
-        else:
-            user_state = database.UserArticleState(
-                user_id=current_user.id,
-                article_id=article_id,
-                is_read=True,
-                is_favorite=False,
-                is_deleted=False
-            )
-            db.add(user_state)
-    
-    db.commit()
-    logger.info(f"API: Bulk marked {len(article_ids)} articles as read for user {current_user.id}")
-    return {"message": f"Marked {len(article_ids)} articles as read", "count": len(article_ids)}
-
-
 @router.get("/deleted")
 async def get_deleted_articles(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(12, ge=1, le=100),
     current_user: database.User = Depends(get_current_user),
     db: SQLAlchemySession = Depends(database.get_db)
 ):
-    """Get all deleted articles for the current user."""
+    """Get deleted articles for the current user with pagination."""
     try:
         feed_source_ids = db.query(database.UserFeedSubscription.feed_source_id).filter(
             database.UserFeedSubscription.user_id == current_user.id
@@ -873,34 +865,44 @@ async def get_deleted_articles(
         feed_source_id_set = {f[0] for f in feed_source_ids if f[0] is not None}
         
         if not feed_source_id_set:
-            return []
+            return {"items": [], "total": 0, "page": page, "page_size": page_size}
         
         deleted_states = db.query(database.UserArticleState).filter(
             database.UserArticleState.user_id == current_user.id,
             database.UserArticleState.is_deleted == True
-        ).all()
+        ).order_by(database.UserArticleState.deleted_at.desc()).all()
         
         deleted_article_ids = [s.article_id for s in deleted_states if s.article_id is not None]
         
         if not deleted_article_ids:
-            return []
+            return {"items": [], "total": 0, "page": page, "page_size": page_size}
         
-        # Only query articles that still exist in the database
+        total_count = len(deleted_article_ids)
+        
+        offset = (page - 1) * page_size
+        paginated_article_ids = deleted_article_ids[offset:offset + page_size]
+        
+        if not paginated_article_ids:
+            return {"items": [], "total": total_count, "page": page, "page_size": page_size}
+        
         existing_articles = db.query(database.Article).filter(
-            database.Article.id.in_(deleted_article_ids),
+            database.Article.id.in_(paginated_article_ids),
             database.Article.feed_source_id.in_(feed_source_id_set)
         ).all()
-        
-        existing_article_ids = {a.id for a in existing_articles}
         
         feed_sources = db.query(database.FeedSource).filter(
             database.FeedSource.id.in_(feed_source_id_set)
         ).all()
         feed_source_map = {fs.id: fs.name for fs in feed_sources}
         
+        article_map = {a.id: a for a in existing_articles}
+        
         results = []
-        for article in existing_articles:
-            state = next((s for s in deleted_states if s.article_id == article.id), None)
+        for article_id in paginated_article_ids:
+            article = article_map.get(article_id)
+            if not article:
+                continue
+            state = next((s for s in deleted_states if s.article_id == article_id), None)
             publisher = feed_source_map.get(article.feed_source_id) if article.feed_source_id else None
             if not publisher:
                 publisher = article.publisher_name or "Unknown"
@@ -913,8 +915,7 @@ async def get_deleted_articles(
                 "created_at": article.created_at.isoformat() if article.created_at else None,
             })
         
-        results.sort(key=lambda x: x.get("deleted_at") or "", reverse=True)
-        return results
+        return {"items": results, "total": total_count, "page": page, "page_size": page_size}
     except Exception as e:
         logger.error(f"Error fetching deleted articles: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Error fetching deleted articles.")

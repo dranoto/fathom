@@ -76,6 +76,25 @@ def create_db_and_tables():
                             except Exception as e:
                                 print(f"DATABASE: Could not add column '{column_name}' to '{table_name}': {e}")
 
+                index_migrations = [
+                    ('ix_user_article_states_user_article', 'user_article_states', 'user_id, article_id'),
+                    ('ix_article_tag_assoc_user_article', 'article_tag_association', 'user_id, article_id'),
+                    ('ix_articles_feed_source_id', 'articles', 'feed_source_id'),
+                    ('ix_summaries_user_article', 'summaries', 'user_id, article_id'),
+                    ('ix_chat_history_user_article', 'chat_history', 'user_id, article_id'),
+                ]
+
+                existing_indexes = inspector.get_indexes('user_article_states')
+                existing_index_names = {idx['name'] for idx in existing_indexes}
+                
+                for index_name, table_name, columns in index_migrations:
+                    if index_name not in existing_index_names:
+                        try:
+                            connection.execute(text(f'CREATE INDEX IF NOT EXISTS {index_name} ON {table_name} ({columns})'))
+                            print(f"DATABASE: Created index '{index_name}' on '{table_name}' ({columns})")
+                        except Exception as e:
+                            print(f"DATABASE: Could not create index '{index_name}': {e}")
+
                 if inspector.has_table("article_tag_association"):
                     table_result = connection.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='article_tag_association'"))
                     table_row = table_result.fetchone()
