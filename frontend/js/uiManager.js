@@ -67,12 +67,17 @@ export function refreshMuuriLayout() {
  */
 export function refreshMuuriItem(articleCard) {
     if (muuriGrid && articleCard) {
-        const muuriItem = articleCard.closest('.muuri-item');
-        if (muuriItem) {
-            muuriGrid.refreshItems([muuriItem]);
-            muuriGrid.layout();
+        const muuriItemEl = articleCard.closest('.muuri-item');
+        if (muuriItemEl) {
+            const muuriItem = muuriGrid.getItem(muuriItemEl);
+            if (muuriItem) {
+                muuriGrid.refreshItems([muuriItem]);
+                muuriGrid.layout();
+            } else {
+                muuriGrid.refreshItems();
+                muuriGrid.layout();
+            }
         } else {
-            // If muuri item not found, refresh all
             muuriGrid.refreshItems();
             muuriGrid.layout();
         }
