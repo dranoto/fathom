@@ -1,23 +1,23 @@
 /* static_frontend/css/responsive.css */
 
-/* Medium screens and up - 2 columns for article grid */
+/* Medium screens and up - 2 columns for article grid (handled by Muuri) */
 @media (min-width: 768px) {
-    .results-grid {
-        column-count: 2;
+    .muuri-item {
+        width: calc(50% - 13px);
     }
 }
 
-/* Large screens - allow for 2 or potentially 3 if very wide for article grid */
+/* Large screens - allow for 2 columns (handled by Muuri) */
 @media (min-width: 1200px) {
-    .results-grid {
-        column-count: 2;
+    .muuri-item {
+        width: calc(50% - 13px);
     }
 }
 
 /* General Responsive Adjustments for smaller screens */
 @media (max-width: 992px) { 
-    .results-grid {
-        column-count: 2;
+    .muuri-item {
+        width: calc(50% - 13px);
     }
 }
 
@@ -43,8 +43,9 @@
         max-width: 100%; 
         width: 100%;
     }
-    .results-grid {
-        column-count: 1; /* Single column for smaller screens */
+    .muuri-item {
+        width: 100%;
+        position: relative; /* Stack vertically on mobile */
     }
     .feed-filters { /* Adjust padding for smaller screens */
         padding-left: 10px; 
@@ -121,8 +122,8 @@
         font-size: 0.75em;
         padding: 4px 8px;
     }
-    .results-grid {
-        column-count: 1;
+    .article-card {
+        width: 100%;
         padding: 0 5px;
     }
 }

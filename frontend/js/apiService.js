@@ -304,8 +304,8 @@ export async function markArticleUnread(articleId) {
     });
 }
 
-export async function deleteArticle(articleId) {
-    return handleFetch(`${CHAT_API_ENDPOINT_BASE}/articles/${articleId}/delete`, {
+export async function archiveArticle(articleId) {
+    return handleFetch(`${CHAT_API_ENDPOINT_BASE}/articles/${articleId}/archive`, {
         method: 'POST'
     });
 }
@@ -330,8 +330,8 @@ export async function bulkMarkRead(articleIds) {
     });
 }
 
-export async function fetchDeletedArticles() {
-    return handleFetch(`${CHAT_API_ENDPOINT_BASE}/articles/deleted`);
+export async function fetchArchivedArticles(page = 1, pageSize = 12) {
+    return handleFetch(`${CHAT_API_ENDPOINT_BASE}/articles/archived?page=${page}&page_size=${pageSize}`);
 }
 
 export async function fetchUserTags() {

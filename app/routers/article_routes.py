@@ -462,11 +462,14 @@ async def toggle_favorite_status(
 
     min_word_count_threshold = app_config.DEFAULT_MINIMUM_WORD_COUNT
 
+    user_favorite_ids = {article_id} if user_state.is_favorite else set()
+
     return article_helpers._create_article_result(
         article_db_obj=article_db,
         db=db,
         min_word_count_threshold=min_word_count_threshold,
-        user_id=current_user.id
+        user_id=current_user.id,
+        user_favorite_ids=user_favorite_ids
     )
 
 
@@ -771,13 +774,13 @@ async def mark_article_unread(
     return {"message": "Article marked as unread", "article_id": article_id}
 
 
-@router.post("/{article_id}/delete")
-async def soft_delete_article(
+@router.post("/{article_id}/archive")
+async def archive_article(
     article_id: int,
     current_user: database.User = Depends(get_current_user),
     db: SQLAlchemySession = Depends(database.get_db)
 ):
-    """Soft-delete an article for the current user."""
+    """Archive an article for the current user."""
     security.verify_article_access(db, article_id, current_user.id)
     
     user_state = db.query(database.UserArticleState).filter(
@@ -800,8 +803,8 @@ async def soft_delete_article(
         user_state.is_favorite = False
     
     db.commit()
-    logger.info(f"API: Article {article_id} soft-deleted for user {current_user.id}")
-    return {"message": "Article moved to deleted", "article_id": article_id}
+    logger.info(f"API: Article {article_id} archived for user {current_user.id}")
+    return {"message": "Article moved to archived", "article_id": article_id}
 
 
 @router.post("/{article_id}/restore")
@@ -828,13 +831,13 @@ async def restore_article(
     return {"message": "Article restored", "article_id": article_id}
 
 
-@router.post("/{article_id}/permanent-delete")
-async def permanent_delete_article(
+@router.post("/{article_id}/purge")
+async def purge_article(
     article_id: int,
     current_user: database.User = Depends(get_current_user),
     db: SQLAlchemySession = Depends(database.get_db)
 ):
-    """Permanently delete user's article state (not the article itself)."""
+    """Permanently purge user's article state from the system (admin only)."""
     security.verify_article_access(db, article_id, current_user.id)
     
     user_state = db.query(database.UserArticleState).filter(
@@ -845,19 +848,19 @@ async def permanent_delete_article(
     if user_state:
         db.delete(user_state)
         db.commit()
-        logger.info(f"API: User {current_user.id} permanently deleted state for article {article_id}")
+        logger.info(f"API: User {current_user.id} purged article state for article {article_id}")
     
-    return {"message": "Article permanently deleted", "article_id": article_id}
+    return {"message": "Article purged", "article_id": article_id}
 
 
-@router.get("/deleted")
-async def get_deleted_articles(
+@router.get("/archived")
+async def get_archived_articles(
     page: int = Query(1, ge=1),
     page_size: int = Query(12, ge=1, le=100),
     current_user: database.User = Depends(get_current_user),
     db: SQLAlchemySession = Depends(database.get_db)
 ):
-    """Get deleted articles for the current user with pagination."""
+    """Get archived articles for the current user with pagination."""
     try:
         feed_source_ids = db.query(database.UserFeedSubscription.feed_source_id).filter(
             database.UserFeedSubscription.user_id == current_user.id
@@ -867,20 +870,20 @@ async def get_deleted_articles(
         if not feed_source_id_set:
             return {"items": [], "total": 0, "page": page, "page_size": page_size}
         
-        deleted_states = db.query(database.UserArticleState).filter(
+        archived_states = db.query(database.UserArticleState).filter(
             database.UserArticleState.user_id == current_user.id,
             database.UserArticleState.is_deleted == True
         ).order_by(database.UserArticleState.deleted_at.desc()).all()
         
-        deleted_article_ids = [s.article_id for s in deleted_states if s.article_id is not None]
+        archived_article_ids = [s.article_id for s in archived_states if s.article_id is not None]
         
-        if not deleted_article_ids:
+        if not archived_article_ids:
             return {"items": [], "total": 0, "page": page, "page_size": page_size}
         
-        total_count = len(deleted_article_ids)
+        total_count = len(archived_article_ids)
         
         offset = (page - 1) * page_size
-        paginated_article_ids = deleted_article_ids[offset:offset + page_size]
+        paginated_article_ids = archived_article_ids[offset:offset + page_size]
         
         if not paginated_article_ids:
             return {"items": [], "total": total_count, "page": page, "page_size": page_size}
@@ -902,7 +905,7 @@ async def get_deleted_articles(
             article = article_map.get(article_id)
             if not article:
                 continue
-            state = next((s for s in deleted_states if s.article_id == article_id), None)
+            state = next((s for s in archived_states if s.article_id == article_id), None)
             publisher = feed_source_map.get(article.feed_source_id) if article.feed_source_id else None
             if not publisher:
                 publisher = article.publisher_name or "Unknown"
@@ -911,11 +914,11 @@ async def get_deleted_articles(
                 "title": article.title,
                 "url": article.url,
                 "publisher": publisher,
-                "deleted_at": state.deleted_at.isoformat() if state and state.deleted_at else None,
+                "archived_at": state.deleted_at.isoformat() if state and state.deleted_at else None,
                 "created_at": article.created_at.isoformat() if article.created_at else None,
             })
         
         return {"items": results, "total": total_count, "page": page, "page_size": page_size}
     except Exception as e:
-        logger.error(f"Error fetching deleted articles: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Error fetching deleted articles.")
+        logger.error(f"Error fetching archived articles: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error fetching archived articles.")

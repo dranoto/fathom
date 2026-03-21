@@ -178,6 +178,7 @@ async function pollForNewArticles() {
 async function initializeAppSettings() {
     console.log("MainScript: Initializing application settings...");
     initializeAllDOMReferences();
+    uiManager.initMuuriGrid();
     uiManager.showLoadingIndicator(true, "Initializing application...");
     try {
         const initialBackendConfig = await apiService.fetchInitialConfigData();
@@ -364,6 +365,11 @@ async function handleFavoriteClick(articleId, favoriteButtonElement) {
     const isFavoritesView = state.activeView === 'favorites';
 
     const articleCard = favoriteButtonElement.closest('.article-card');
+    console.log('Favorite: articleCard found:', articleCard?.id, articleCard?.className);
+    const muuriItemEl = articleCard?.closest('.muuri-item');
+    console.log('Favorite: muuriItemEl found:', muuriItemEl);
+    const muuriGrid = uiManager.getMuuriGrid();
+    console.log(`Favorite: wasFavorite=${wasFavorite}, isFavoritesView=${isFavoritesView}, hasMuuriGrid=${!!muuriGrid}`);
 
     try {
         const updatedArticle = await apiService.toggleFavoriteStatus(articleId);
@@ -373,15 +379,33 @@ async function handleFavoriteClick(articleId, favoriteButtonElement) {
             favoriteButtonElement.classList.add('is-favorite');
             favoriteButtonElement.title = "Remove from favorites";
             state.addLocallyFavoritedArticle(articleId);
-            if (!isFavoritesView && articleCard) {
-                articleCard.remove();
+            // When favoriting in main feed, hide from grid
+            if (!isFavoritesView && muuriItemEl && muuriGrid) {
+                const muuriItem = muuriGrid.getItem(muuriItemEl);
+                console.log('Favorite: muuriItem (via getItem):', muuriItem);
+                if (muuriItem) {
+                    console.log('Favorite: Adding to favorites, hiding from main feed');
+                    muuriGrid.hide([muuriItem]);
+                    setTimeout(() => {
+                        muuriGrid.layout();
+                    }, 250);
+                }
             }
         } else {
             favoriteButtonElement.classList.remove('is-favorite');
             favoriteButtonElement.title = "Add to favorites";
             state.removeLocallyFavoritedArticle(articleId);
-            if (isFavoritesView && articleCard) {
-                articleCard.remove();
+            // When unfavoriting in favorites view, hide from grid
+            if (isFavoritesView && muuriItemEl && muuriGrid) {
+                const muuriItem = muuriGrid.getItem(muuriItemEl);
+                console.log('Favorite: muuriItem (via getItem):', muuriItem);
+                if (muuriItem) {
+                    console.log('Favorite: Removing from favorites');
+                    muuriGrid.hide([muuriItem]);
+                    setTimeout(() => {
+                        muuriGrid.layout();
+                    }, 250);
+                }
             }
         }
     } catch (error) {
@@ -425,6 +449,8 @@ async function summarizeArticle(articleId, customPrompt) {
     try {
         const updatedArticle = await apiService.regenerateSummary(articleId, { custom_prompt: customPrompt });
         uiManager.updateArticleCard(updatedArticle, handleArticleTagClick);
+        // Refresh Muuri item after card content changes (summary added/changed)
+        uiManager.refreshMuuriItem(articleCardElement);
     } catch (error) {
         console.error("MainScript: Error regenerating summary:", error);
         if (summaryElement) {
@@ -530,7 +556,7 @@ function setupGlobalEventListeners() {
                 state.setActiveView('deleted');
                 uiManager.showSection('deleted-section');
                 uiManager.updateNavButtonStyles();
-                loadDeletedArticles();
+                loadArchivedArticles();
             }
         });
     }
@@ -879,22 +905,34 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log("MainScript: Full application initialization complete.");
 });
 
-async function loadDeletedArticles() {
-    const deletedList = document.getElementById('deleted-articles-list');
+let archivedArticlesPage = 1;
+let archivedArticlesTotal = 0;
+let archivedArticlesPageSize = 12;
+
+async function loadArchivedArticles(page = 1) {
+    const archivedList = document.getElementById('deleted-articles-list');
     
-    if (!deletedList) return;
+    if (!archivedList) return;
     
-    deletedList.innerHTML = '<p>Loading deleted articles...</p>';
+    archivedArticlesPage = page;
+    archivedList.innerHTML = '<p>Loading archived articles...</p>';
     
     try {
-        const articles = await apiService.fetchDeletedArticles();
+        const response = await apiService.fetchArchivedArticles(page, archivedArticlesPageSize);
+        const articles = response.items || [];
+        archivedArticlesTotal = response.total || 0;
         
-        if (articles.length === 0) {
-            deletedList.innerHTML = '<p>No deleted articles.</p>';
+        if (articles.length === 0 && page === 1) {
+            archivedList.innerHTML = '<p>No archived articles.</p>';
             return;
         }
         
-        deletedList.innerHTML = '';
+        if (articles.length === 0) {
+            archivedList.innerHTML = '<p>No more archived articles.</p>';
+            return;
+        }
+        
+        archivedList.innerHTML = '';
         articles.forEach(article => {
             const item = document.createElement('div');
             item.className = 'deleted-article-item';
@@ -902,28 +940,55 @@ async function loadDeletedArticles() {
                 <div class="deleted-article-info">
                     <strong>${article.title || 'No Title'}</strong>
                     <br>
-                    <small>Deleted ${formatTimeAgo(article.deleted_at)}</small>
+                    <small>Archived ${formatTimeAgo(article.archived_at)}</small>
                 </div>
                 <div class="deleted-article-actions">
                     <button class="restore-btn" data-id="${article.id}">Restore</button>
                 </div>
             `;
-            deletedList.appendChild(item);
+            archivedList.appendChild(item);
             
             item.querySelector('.restore-btn').addEventListener('click', async (e) => {
                 const id = e.target.dataset.id;
                 try {
                     await apiService.restoreArticle(parseInt(id));
-                    await loadDeletedArticles();
+                    await loadArchivedArticles(archivedArticlesPage);
                 } catch (error) {
                     alert('Error restoring article');
                 }
             });
         });
         
+        const totalPages = Math.ceil(archivedArticlesTotal / archivedArticlesPageSize);
+        if (totalPages > 1) {
+            const paginationDiv = document.createElement('div');
+            paginationDiv.className = 'archived-pagination';
+            paginationDiv.style.cssText = 'margin-top: 20px; display: flex; gap: 10px; align-items: center; justify-content: center;';
+            
+            if (page > 1) {
+                const prevBtn = document.createElement('button');
+                prevBtn.textContent = 'Previous';
+                prevBtn.onclick = () => loadArchivedArticles(page - 1);
+                paginationDiv.appendChild(prevBtn);
+            }
+            
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = `Page ${page} of ${totalPages} (${archivedArticlesTotal} total)`;
+            paginationDiv.appendChild(pageInfo);
+            
+            if (page < totalPages) {
+                const nextBtn = document.createElement('button');
+                nextBtn.textContent = 'Next';
+                nextBtn.onclick = () => loadArchivedArticles(page + 1);
+                paginationDiv.appendChild(nextBtn);
+            }
+            
+            archivedList.appendChild(paginationDiv);
+        }
+        
     } catch (error) {
-        console.error('Error loading deleted articles:', error);
-        deletedList.innerHTML = '<p>Error loading deleted articles.</p>';
+        console.error('Error loading archived articles:', error);
+        archivedList.innerHTML = '<p>Error loading archived articles.</p>';
     }
 }
 

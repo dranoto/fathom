@@ -9,6 +9,76 @@ import * as chatHandler from './chatHandler.js';
  * and controlling section/modal visibility.
  */
 
+// --- Muuri Grid Instance ---
+let muuriGrid = null;
+
+/**
+ * Initializes the Muuri grid for article layout.
+ */
+export function initMuuriGrid() {
+    if (muuriGrid) {
+        console.log("UIManager: Muuri grid already initialized, returning existing.");
+        return muuriGrid;
+    }
+    
+    console.log("UIManager: Initializing Muuri grid...");
+    const container = document.getElementById('results-container');
+    if (!container) {
+        console.error("UIManager: results-container not found for Muuri initialization.");
+        return null;
+    }
+    
+    console.log("UIManager: Creating new Muuri grid on .results-grid");
+    muuriGrid = new Muuri('.results-grid', {
+        layoutOnInit: true,
+        layoutOnResize: 150,
+        layoutDuration: 300,
+        layoutEasing: 'ease',
+        dragEnabled: false,
+        showDuration: 200,
+        hideDuration: 200,
+    });
+    
+    console.log("UIManager: Muuri grid initialized successfully.");
+    return muuriGrid;
+}
+
+/**
+ * Gets the Muuri grid instance.
+ */
+export function getMuuriGrid() {
+    return muuriGrid;
+}
+
+/**
+ * Triggers a Muuri layout refresh.
+ */
+export function refreshMuuriLayout() {
+    if (muuriGrid) {
+        requestAnimationFrame(() => {
+            muuriGrid.refreshItems();
+            muuriGrid.layout();
+        });
+    }
+}
+
+/**
+ * Refreshes a specific Muuri item after its content changes.
+ */
+export function refreshMuuriItem(articleCard) {
+    if (muuriGrid && articleCard) {
+        const muuriItem = articleCard.closest('.muuri-item');
+        if (muuriItem) {
+            muuriGrid.refreshItems([muuriItem]);
+            muuriGrid.layout();
+        } else {
+            // If muuri item not found, refresh all
+            muuriGrid.refreshItems();
+            muuriGrid.layout();
+        }
+    }
+}
+
 // --- DOM Element References ---
 let resultsContainer, loadingIndicator, loadingText, infiniteScrollLoadingIndicator,
     activeTagFiltersDisplay, mobileActiveTagFiltersDisplay,
@@ -35,6 +105,21 @@ async function handleReadToggle(articleId, readBtn, articleCard) {
             articleCard.classList.add('is-read');
             readBtn.title = "Mark as unread";
         }
+        // Trigger Muuri layout after read state change (card height changes)
+        if (muuriGrid) {
+            const muuriItemEl = articleCard.closest('.muuri-item');
+            if (muuriItemEl) {
+                const muuriItem = muuriGrid.getItem(muuriItemEl);
+                if (muuriItem) {
+                    muuriGrid.refreshItems([muuriItem]);
+                    muuriGrid.layout();
+                } else {
+                    console.warn('Muuri: Could not get item for read toggle');
+                    muuriGrid.refreshItems();
+                    muuriGrid.layout();
+                }
+            }
+        }
     } catch (error) {
         console.error('Error toggling read state:', error);
         alert('Error updating read state');
@@ -42,14 +127,40 @@ async function handleReadToggle(articleId, readBtn, articleCard) {
 }
 
 /**
- * Handles delete for an article.
+ * Handles archive for an article.
  */
-async function handleDeleteArticle(articleId, articleCard) {
+async function handleArchiveArticle(articleId, articleCard) {
     try {
-        await apiService.deleteArticle(articleId);
-        articleCard.remove();
+        await apiService.archiveArticle(articleId);
+        console.log('Archive: API succeeded, hiding card', articleCard.id);
+        
+        if (muuriGrid) {
+            console.log('Archive: muuriGrid exists, finding .muuri-item parent');
+            const muuriItemEl = articleCard.closest('.muuri-item');
+            console.log('Archive: muuriItemEl found:', muuriItemEl);
+            if (muuriItemEl) {
+                const muuriItem = muuriGrid.getItem(muuriItemEl);
+                console.log('Archive: muuriItem (via getItem):', muuriItem);
+                if (muuriItem) {
+                    console.log('Archive: Calling muuriGrid.hide([muuriItem])');
+                    muuriGrid.hide([muuriItem]);
+                    console.log('Archive: hide() returned, waiting for animation then layout');
+                    setTimeout(() => {
+                        muuriGrid.layout();
+                        console.log('Archive: layout() called after delay');
+                    }, 250);
+                } else {
+                    console.error('Archive: muuriGrid.getItem() returned null');
+                }
+            } else {
+                console.log('Archive: .muuri-item NOT found on card. Card classes:', articleCard.className);
+                console.log('Archive: Card parent:', articleCard.parentElement);
+            }
+        } else {
+            console.log('Archive: muuriGrid is NOT initialized');
+        }
     } catch (error) {
-        console.error('Error deleting article:', error);
+        console.error('Error archiving article:', error);
     }
 }
 
@@ -192,7 +303,11 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         return;
     }
     if (clearPrevious) {
-        resultsContainer.innerHTML = '';
+        if (muuriGrid) {
+            muuriGrid.remove(muuriGrid.getItems(), { removeElements: true });
+        } else {
+            resultsContainer.innerHTML = '';
+        }
     }
 
     if (!articles || articles.length === 0) {
@@ -265,7 +380,7 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         deleteBtn.innerHTML = '📦';
         deleteBtn.onclick = (e) => {
             e.stopPropagation();
-            handleDeleteArticle(article.id, articleCard);
+            handleArchiveArticle(article.id, articleCard);
         };
         actionsRow.appendChild(deleteBtn);
 
@@ -306,7 +421,7 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         collapsedDeleteBtn.innerHTML = '📦';
         collapsedDeleteBtn.onclick = (e) => {
             e.stopPropagation();
-            handleDeleteArticle(article.id, articleCard);
+            handleArchiveArticle(article.id, articleCard);
         };
         titleRow.appendChild(collapsedDeleteBtn);
 
@@ -423,8 +538,28 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         }
         articleCard.appendChild(openChatBtn);
 
-        resultsContainer.appendChild(articleCard);
+        // Wrap in Muuri structure
+        const itemWrapper = document.createElement('div');
+        itemWrapper.classList.add('muuri-item');
+        itemWrapper.setAttribute('data-id', article.id);
+
+        const contentWrapper = document.createElement('div');
+        contentWrapper.classList.add('muuri-item-content');
+
+        itemWrapper.appendChild(contentWrapper);
+        contentWrapper.appendChild(articleCard);
+
+        if (muuriGrid) {
+            muuriGrid.add(itemWrapper, { layout: false });
+        } else {
+            resultsContainer.appendChild(itemWrapper);
+        }
     });
+    
+    // After all cards are added, trigger a layout
+    if (muuriGrid) {
+        muuriGrid.layout();
+    }
 }
 
 let feedFilterSelect = null;
