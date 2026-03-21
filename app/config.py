@@ -162,6 +162,25 @@ Article:
 Tags:""")
 
 
+DEFAULT_MAJOR_SUMMARY_PROMPT = os.getenv("DEFAULT_MAJOR_SUMMARY_PROMPT", """Given a collection of articles about {event_name}, analyze them and return a JSON response with three subsections:
+
+Return EXACTLY this JSON structure (no markdown, no extra text):
+{{
+  "timeline_narrative": "Chronological narrative of key developments, organized by date. Highlight the most significant moments.",
+  "cross_source_synthesis": "How do different sources cover this story differently? Note any conflicting angles, unique insights from specific outlets, or notable patterns in coverage.",
+  "progressive_summary": "What is NEW since the last summary (or if no previous summary, what are the most recent developments)? Focus on what the user most needs to know right now.",
+  "article_count": <total number of articles analyzed>,
+  "feed_count": <number of unique feeds>,
+  "date_range": "<earliest date> - <latest date>",
+  "key_developments": ["Milestone 1", "Milestone 2", "Milestone 3"]
+}}
+
+Articles to analyze:
+{article_texts}
+
+Return the JSON now:""")
+
+
 if not OPENAI_API_KEY:
     print("WARNING: OPENAI_API_KEY environment variable is not set. LLM features will be impaired.")
 

@@ -184,6 +184,7 @@ class Article(Base):
     chat_history = relationship("ChatHistory", back_populates="article", cascade="all, delete-orphan")
     user_article_states = relationship("UserArticleState", back_populates="article", cascade="all, delete-orphan")
     tags = relationship("Tag", secondary=article_tag_association, back_populates="articles")
+    article_events = relationship("ArticleEvent", back_populates="article", cascade="all, delete-orphan")
 
     __table_args__ = (
         Index('ix_articles_published_date_id', 'published_date', 'id'),

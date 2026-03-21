@@ -30,6 +30,7 @@ from .routers import (
     user_routes,
     tag_routes
 )
+from .intelligence import router as intelligence_router
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -222,6 +223,7 @@ app.include_router(debug_routes.router)
 app.include_router(auth_routes.router)
 app.include_router(user_routes.router)
 app.include_router(tag_routes.router)
+app.include_router(intelligence_router)
 logger.info("MAIN_API: All API routers included.")
 
 import os
