@@ -318,7 +318,7 @@ async def update_all_subscribed_feeds(db: Session):
 
     logger.info(f"RSS_CLIENT_SCHEDULER: Finished feed update cycle. Total new articles committed across all feeds: {total_new_articles_overall}.")
 
-def update_single_feed(db: Session, feed_id: int):
+async def update_single_feed(db: Session, feed_id: int):
     """
     Updates a single feed by its ID, regardless of whether it's due for update.
     Used for manual refresh of a specific feed.
@@ -329,11 +329,8 @@ def update_single_feed(db: Session, feed_id: int):
         logger.warning(f"RSS_CLIENT: Feed with ID {feed_id} not found.")
         return
     
-    import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     try:
-        newly_added = loop.run_until_complete(fetch_and_store_articles_from_feed(db, feed_source))
+        newly_added = await fetch_and_store_articles_from_feed(db, feed_source)
         db.commit()
         logger.info(f"RSS_CLIENT: Successfully processed single feed '{feed_source.name}'. Added {newly_added} articles.")
     except Exception as e:
@@ -345,8 +342,6 @@ def update_single_feed(db: Session, feed_id: int):
             db.commit()
         except Exception:
             db.rollback()
-    finally:
-        loop.close()
 
 def add_initial_feeds_to_db(db: Session, feed_urls: list[str]):
     logger.info(f"RSS_CLIENT: Attempting to add/verify initial feeds: {feed_urls}")
@@ -376,7 +371,7 @@ def add_initial_feeds_to_db(db: Session, feed_urls: list[str]):
     else:
         logger.info("RSS_CLIENT: No new feed sources added (all provided URLs likely exist or list was empty).")
 
-def update_single_user_feed(db: Session, subscription_id: int, user_id: int):
+async def update_single_user_feed(db: Session, subscription_id: int, user_id: int):
     """
     Updates a single user's feed subscription by triggering a fetch of the associated FeedSource.
     """
@@ -396,19 +391,11 @@ def update_single_user_feed(db: Session, subscription_id: int, user_id: int):
         logger.warning(f"RSS_CLIENT: FeedSource with ID {subscription.feed_source_id} not found.")
         return
     
-    import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
     try:
-        async def fetch_with_feed_source():
-            return await fetch_and_store_articles_from_feed(db, feed_source)
-        
-        newly_added = loop.run_until_complete(fetch_with_feed_source())
+        newly_added = await fetch_and_store_articles_from_feed(db, feed_source)
         db.commit()
         
         logger.info(f"RSS_CLIENT: Successfully processed feed '{feed_source.url}'. Added {newly_added} articles.")
     except Exception as e:
         db.rollback()
         logger.error(f"RSS_CLIENT: Error processing feed {feed_source.url}: {e}", exc_info=True)
-    finally:
-        loop.close()

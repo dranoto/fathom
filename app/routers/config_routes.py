@@ -166,7 +166,7 @@ async def update_app_settings_endpoint(
 
     except Exception as e:
         logger.error(f"Error updating application settings: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to update settings: {e}")
+        raise HTTPException(status_code=500, detail="Failed to update settings.")
 
 @router.post("/config/refresh-models")
 async def refresh_available_models_endpoint(
@@ -196,7 +196,7 @@ async def refresh_available_models_endpoint(
             raise HTTPException(status_code=response.status_code, detail="Failed to fetch models from API")
     except httpx.RequestError as e:
         logger.error(f"CONFIG_ROUTES: Request error while fetching models: {e}")
-        raise HTTPException(status_code=500, detail=f"Request error: {str(e)}")
+        raise HTTPException(status_code=500, detail="Request error while fetching models.")
     except Exception as e:
         logger.error(f"CONFIG_ROUTES: Error refreshing models: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Error refreshing models.")

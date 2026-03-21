@@ -1,5 +1,7 @@
 # app/routers/auth_routes.py
 import logging
+import os
+import secrets
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -19,12 +21,36 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 security = HTTPBearer(auto_error=False)
 
-JWT_SECRET_KEY = app_config.OPENAI_API_KEY or "default-secret-key-change-in-production"
+_rate_limit_store: dict[str, tuple[int, float]] = {}
+_RATE_LIMIT_WINDOW_SECONDS = 60
+_RATE_LIMIT_MAX_ATTEMPTS = 5
+
+_jwt_secret = os.getenv("JWT_SECRET_KEY") if os.getenv("JWT_SECRET_KEY") else app_config.OPENAI_API_KEY
+if not _jwt_secret:
+    _jwt_secret = secrets.token_hex(32)
+    logger.warning("AUTH: JWT_SECRET_KEY not set, using generated secret. Set JWT_SECRET_KEY env var for production.")
+JWT_SECRET_KEY = _jwt_secret
 JWT_ALGORITHM = "HS256"
+
+
+def _check_rate_limit(identifier: str) -> tuple[bool, int]:
+    import time
+    current_time = time.time()
+    if identifier in _rate_limit_store:
+        attempts, first_attempt_time = _rate_limit_store[identifier]
+        if current_time - first_attempt_time > _RATE_LIMIT_WINDOW_SECONDS:
+            _rate_limit_store[identifier] = (1, current_time)
+            return True, _RATE_LIMIT_MAX_ATTEMPTS - 1
+        if attempts >= _RATE_LIMIT_MAX_ATTEMPTS:
+            return False, 0
+        _rate_limit_store[identifier] = (attempts + 1, first_attempt_time)
+        return True, _RATE_LIMIT_MAX_ATTEMPTS - attempts - 1
+    _rate_limit_store[identifier] = (1, current_time)
+    return True, _RATE_LIMIT_MAX_ATTEMPTS - 1
 
 class RegisterRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=1)
+    password: str = Field(min_length=4, max_length=128)
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -71,7 +97,7 @@ def create_access_token(user_id: int, email: str) -> str:
 
 def decode_token(token: str) -> Optional[dict]:
     try:
-        payload = pyjwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM], options={"verify_signature": False})
+        payload = pyjwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
         return payload
     except pyjwt.ExpiredSignatureError:
         logger.warning("JWT token expired")
@@ -174,12 +200,40 @@ async def register(request: RegisterRequest, db: SQLAlchemySession = Depends(dat
 
 @router.post("/login", response_model=AuthResponse)
 async def login(request: LoginRequest, db: SQLAlchemySession = Depends(database.get_db)):
+    allowed, remaining = _check_rate_limit(request.email)
+    if not allowed:
+        logger.warning(f"AUTH: Rate limit exceeded for login attempt: {request.email}")
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts. Please try again later."
+        )
+    
     user = db.query(database.User).filter(database.User.email == request.email).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password"
         )
+    
+    if not verify_password(request.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
+    
+    user.last_login_at = datetime.now(timezone.utc)
+    db.commit()
+    
+    token = create_access_token(user.id, user.email)
+    
+    logger.info(f"AUTH: User logged in: {user.email}")
+    
+    return AuthResponse(
+        access_token=token,
+        user_id=user.id,
+        email=user.email,
+        is_admin=getattr(user, 'is_admin', False)
+    )
     
     if not verify_password(request.password, user.password_hash):
         raise HTTPException(

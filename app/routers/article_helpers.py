@@ -41,25 +41,27 @@ def _create_article_result(
     min_word_count_threshold: int,
     user_id: int,
     summary_text: Optional[str] = None,
-    error_message: Optional[str] = None
+    error_message: Optional[str] = None,
+    user_favorite_ids: Optional[set[int]] = None,
+    user_read_ids: Optional[set[int]] = None,
+    user_deleted_ids: Optional[set[int]] = None,
+    chat_history_article_ids: Optional[set[int]] = None,
+    article_tags_map: Optional[dict[int, list[ArticleTagResponse]]] = None
 ) -> ArticleResult:
     """
     Creates an ArticleResult Pydantic model from an Article database object.
-    Uses user_article_states for read/favorite/deleted status.
+    Uses pre-fetched data to avoid N+1 queries.
     """
-    user_state = db.query(database.UserArticleState).filter(
-        database.UserArticleState.user_id == user_id,
-        database.UserArticleState.article_id == article_db_obj.id
-    ).first()
+    article_id = article_db_obj.id
 
-    is_favorite = user_state.is_favorite if user_state else False
-    is_read = user_state.is_read if user_state else False
-    is_deleted = user_state.is_deleted if user_state else False
+    is_favorite = article_id in user_favorite_ids if user_favorite_ids else False
+    is_read = article_id in user_read_ids if user_read_ids else False
+    is_deleted = article_id in user_deleted_ids if user_deleted_ids else False
 
     if summary_text is None:
         latest_summary = db.query(database.Summary).filter(
             database.Summary.user_id == user_id,
-            database.Summary.article_id == article_db_obj.id
+            database.Summary.article_id == article_id
         ).order_by(database.Summary.created_at.desc()).first()
         summary_text = latest_summary.summary_text if latest_summary else None
 
@@ -69,20 +71,9 @@ def _create_article_result(
         (article_db_obj.word_count is None or article_db_obj.word_count >= min_word_count_threshold)
     )
 
-    has_chat_history = db.query(database.ChatHistory).filter(
-        database.ChatHistory.user_id == user_id,
-        database.ChatHistory.article_id == article_db_obj.id
-    ).count() > 0
+    has_chat_history = article_id in chat_history_article_ids if chat_history_article_ids else False
 
-    user_tags = db.query(database.Tag).join(
-        database.article_tag_association,
-        database.Tag.id == database.article_tag_association.c.tag_id
-    ).filter(
-        database.article_tag_association.c.user_id == user_id,
-        database.article_tag_association.c.article_id == article_db_obj.id
-    ).all()
-
-    tags = [ArticleTagResponse(id=tag.id, name=tag.name) for tag in user_tags]
+    tags = article_tags_map.get(article_id, []) if article_tags_map else []
 
     return ArticleResult(
         id=article_db_obj.id,

@@ -11,6 +11,7 @@ from .. import config, settings_database, database
 from ..database import db_session_scope
 from ..scraper import get_extension_status
 from .auth_routes import get_current_user
+from .admin_routes import require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def clear_scrape_results():
 @router.get("/status")
 async def get_debug_status(
     request: Request,
-    current_user: database.User = Depends(get_current_user),
+    admin_user: database.User = Depends(require_admin),
     settings_db: SQLAlchemySession = Depends(settings_database.get_db)
 ) -> Dict[str, Any]:
     debug_level = settings_database.get_setting(settings_db, "debug_level", config.DEBUG_LEVEL)
@@ -85,7 +86,7 @@ async def get_debug_status(
 async def test_scrape(
     url: str,
     request: Request,
-    current_user: database.User = Depends(get_current_user),
+    admin_user: database.User = Depends(require_admin),
     settings_db: SQLAlchemySession = Depends(settings_database.get_db)
 ) -> Dict[str, Any]:
     test_url = url.strip()
@@ -158,12 +159,12 @@ async def test_scrape(
         }
         add_scrape_result(error_result)
         
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to scrape URL.")
 
 @router.get("/scrape-history")
 async def get_scrape_history(
     limit: int = 20,
-    current_user: database.User = Depends(get_current_user),
+    admin_user: database.User = Depends(require_admin),
     settings_db: SQLAlchemySession = Depends(settings_database.get_db)
 ) -> Dict[str, Any]:
     debug_level = settings_database.get_setting(settings_db, "debug_level", config.DEBUG_LEVEL)
@@ -174,7 +175,7 @@ async def get_scrape_history(
 
 @router.post("/clear-history")
 async def clear_history(
-    current_user: database.User = Depends(get_current_user)
+    admin_user: database.User = Depends(require_admin)
 ) -> Dict[str, str]:
     clear_scrape_results()
     return {"message": "Scrape history cleared"}

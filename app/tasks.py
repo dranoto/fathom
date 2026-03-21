@@ -60,7 +60,7 @@ async def trigger_rss_update_single_feed(feed_id: int):
         logger.info(f"TASK: Acquired RSS update lock. Starting single feed update for feed ID {feed_id}.")
         try:
             with database.db_session_scope() as db:
-                rss_client.update_single_feed(db, feed_id)
+                await rss_client.update_single_feed(db, feed_id)
             logger.info(f"TASK: Single feed update for feed ID {feed_id} finished successfully.")
         except Exception as e:
             logger.error(f"TASK: Exception during single feed update for feed ID {feed_id}: {e}", exc_info=True)
@@ -79,7 +79,7 @@ async def trigger_rss_update_single_user_feed(feed_id: int, user_id: int):
         logger.info(f"TASK: Acquired RSS update lock. Starting user feed update for feed ID {feed_id}, user {user_id}.")
         try:
             with database.db_session_scope() as db:
-                rss_client.update_single_user_feed(db, feed_id, user_id)
+                await rss_client.update_single_user_feed(db, feed_id, user_id)
             logger.info(f"TASK: User feed update for feed ID {feed_id}, user {user_id} finished successfully.")
         except Exception as e:
             logger.error(f"TASK: Exception during user feed update for feed ID {feed_id}, user {user_id}: {e}", exc_info=True)

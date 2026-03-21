@@ -44,7 +44,7 @@ async def get_sanitized_article_content(
         sanitized_content = sanitizer.sanitize_html_content(article_db.full_html_content)
     except Exception as e:
         logger.error(f"API Error: Failed to sanitize HTML content for Article ID {article_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to process article content: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to process article content.")
 
     return SanitizedArticleContentResponse(
         article_id=article_db.id,

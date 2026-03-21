@@ -261,6 +261,32 @@ async def get_news_summaries_endpoint(
             if summary.article_id not in summaries_map and not summary.summary_text.startswith("Error:"):
                 summaries_map[summary.article_id] = summary.summary_text
     
+    chat_history_article_ids = set()
+    if article_ids_on_page:
+        chat_history_rows = db.query(database.ChatHistory.article_id).filter(
+            database.ChatHistory.user_id == current_user.id,
+            database.ChatHistory.article_id.in_(article_ids_on_page)
+        ).all()
+        chat_history_article_ids = {row[0] for row in chat_history_rows}
+    
+    article_tags_map = {}
+    if article_ids_on_page:
+        tag_rows = db.query(
+            database.Tag.id,
+            database.Tag.name,
+            database.article_tag_association.c.article_id
+        ).join(
+            database.article_tag_association,
+            database.Tag.id == database.article_tag_association.c.tag_id
+        ).filter(
+            database.article_tag_association.c.user_id == current_user.id,
+            database.article_tag_association.c.article_id.in_(article_ids_on_page)
+        ).all()
+        for tag_id, tag_name, art_id in tag_rows:
+            if art_id not in article_tags_map:
+                article_tags_map[art_id] = []
+            article_tags_map[art_id].append(ArticleTagResponse(id=tag_id, name=tag_name))
+    
     results_on_page: List[ArticleResult] = []
     articles_needing_ondemand_scrape: List[database.Article] = []
     
@@ -282,7 +308,12 @@ async def get_news_summaries_endpoint(
             min_word_count_threshold=min_word_count_threshold,
             user_id=current_user.id,
             summary_text=summaries_map.get(article_db_obj.id),
-            error_message=" | ".join(list(set(error_parts_for_display))) if error_parts_for_display else None
+            error_message=" | ".join(list(set(error_parts_for_display))) if error_parts_for_display else None,
+            user_favorite_ids=user_favorite_ids,
+            user_read_ids=user_read_ids,
+            user_deleted_ids=user_deleted_ids,
+            chat_history_article_ids=chat_history_article_ids,
+            article_tags_map=article_tags_map
         )
         results_on_page.append(article_result)
 
@@ -331,7 +362,12 @@ async def get_news_summaries_endpoint(
                         min_word_count_threshold=min_word_count_threshold,
                         user_id=current_user.id,
                         summary_text=summaries_map.get(art_db_obj_to_process.id),
-                        error_message=" | ".join(error_parts_for_display) if error_parts_for_display else None
+                        error_message=" | ".join(error_parts_for_display) if error_parts_for_display else None,
+                        user_favorite_ids=user_favorite_ids,
+                        user_read_ids=user_read_ids,
+                        user_deleted_ids=user_deleted_ids,
+                        chat_history_article_ids=chat_history_article_ids,
+                        article_tags_map=article_tags_map
                     )
                     break
     
@@ -460,7 +496,7 @@ async def regenerate_article_summary(
                 current_text_content = article_db.scraped_text_content
                 db.add(article_db)
                 logger.error(f"API Regenerate: Failed to re-scrape for Article ID {article_id}: {scraper_error_msg_regen}")
-                raise HTTPException(status_code=500, detail=f"Failed to get valid content for regeneration: {scraper_error_msg_regen}")
+                raise HTTPException(status_code=500, detail="Failed to fetch article content. Please try again later.")
         else:
             scraper_error_msg_regen = "Failed to re-scrape: No document returned."
             article_db.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_regen}"
@@ -469,7 +505,7 @@ async def regenerate_article_summary(
             current_text_content = article_db.scraped_text_content
             db.add(article_db)
             logger.error(f"API Regenerate: Failed to re-scrape for Article ID {article_id}: {scraper_error_msg_regen}")
-            raise HTTPException(status_code=500, detail=f"Failed to get valid content for regeneration: {scraper_error_msg_regen}")
+            raise HTTPException(status_code=500, detail="Failed to fetch article content. Please try again later.")
 
     if not current_text_content or current_text_content.startswith(SCRAPING_ERROR_PREFIX) or (current_word_count is not None and current_word_count < min_word_count_threshold):
         logger.error(f"API Regenerate: Article text content for ID {article_id} is still invalid or too short.")
@@ -581,7 +617,7 @@ async def regenerate_article_summary(
     except Exception as e:
         db.rollback()
         logger.error(f"API Regenerate: Error committing changes for Article ID {article_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"A database error occurred while saving changes: {e}")
+        raise HTTPException(status_code=500, detail="A database error occurred while saving changes.")
 
     return article_helpers._create_article_result(
         article_db_obj=article_db,
@@ -881,4 +917,4 @@ async def get_deleted_articles(
         return results
     except Exception as e:
         logger.error(f"Error fetching deleted articles: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Error fetching deleted articles: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error fetching deleted articles.")

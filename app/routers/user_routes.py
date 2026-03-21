@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session as SQLAlchemySession
-from pydantic import BaseModel
+from pydantic import BaseModel, HttpUrl
 
 from .. import database
 from .. import tasks
@@ -38,7 +38,7 @@ class UserFeedResponse(BaseModel):
 
 
 class AddFeedRequest(BaseModel):
-    url: str
+    url: HttpUrl
     custom_name: Optional[str] = None
 
 

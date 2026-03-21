@@ -64,7 +64,7 @@ async def add_new_feed_source(
     except Exception as e:
         db.rollback()
         logger.error(f"Unexpected error adding feed {feed_request.url}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Could not add feed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not add feed.")
 
 
 @router.get("/feeds", response_model=List[FeedSourceResponse])
@@ -116,7 +116,7 @@ async def update_feed_source_settings(
         except Exception as e:
             db.rollback()
             logger.error(f"Error updating feed source ID {feed_id}: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=f"Could not update feed settings: {str(e)}")
+            raise HTTPException(status_code=500, detail="Could not update feed settings.")
     else:
         logger.info(f"No changes requested for feed source ID {feed_id}.")
         
@@ -149,7 +149,7 @@ async def delete_feed_source(
     except Exception as e:
         db.rollback()
         logger.error(f"Error deleting feed source ID {feed_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Could not delete feed source: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not delete feed source.")
     
     return None
 
@@ -172,7 +172,7 @@ async def manual_trigger_rss_refresh(
         raise HTTPException(status_code=500, detail="RSS refresh task is not configured correctly.")
     except Exception as e:
         logger.error(f"Error scheduling manual RSS refresh: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Could not schedule RSS refresh: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not schedule RSS refresh.")
 
 
 @router.post("/feeds/{feed_id}/refresh", status_code=202)
@@ -199,7 +199,7 @@ async def refresh_single_feed(
         raise HTTPException(status_code=500, detail="Single feed refresh task is not configured correctly.")
     except Exception as e:
         logger.error(f"Error scheduling single feed RSS refresh for feed ID {feed_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Could not schedule RSS refresh: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not schedule RSS refresh.")
 
 
 @router.get("/feeds/refresh-status", response_model=RefreshStatusResponse)
