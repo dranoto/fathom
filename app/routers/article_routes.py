@@ -747,8 +747,14 @@ async def mark_article_read(
     else:
         user_state.is_read = True
     
-    db.commit()
-    logger.info(f"API: Article {article_id} marked as read for user {current_user.id}")
+    try:
+        db.commit()
+        logger.info(f"API: Article {article_id} marked as read for user {current_user.id}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"API: Error marking article {article_id} as read for user {current_user.id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to mark article as read. Please try again.")
+    
     return {"message": "Article marked as read", "article_id": article_id}
 
 
@@ -769,8 +775,14 @@ async def mark_article_unread(
     if user_state:
         user_state.is_read = False
     
-    db.commit()
-    logger.info(f"API: Article {article_id} marked as unread for user {current_user.id}")
+    try:
+        db.commit()
+        logger.info(f"API: Article {article_id} marked as unread for user {current_user.id}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"API: Error marking article {article_id} as unread for user {current_user.id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to mark article as unread. Please try again.")
+    
     return {"message": "Article marked as unread", "article_id": article_id}
 
 
@@ -802,8 +814,14 @@ async def archive_article(
         user_state.deleted_at = datetime.now(timezone.utc)
         user_state.is_favorite = False
     
-    db.commit()
-    logger.info(f"API: Article {article_id} archived for user {current_user.id}")
+    try:
+        db.commit()
+        logger.info(f"API: Article {article_id} archived for user {current_user.id}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"API: Error archiving article {article_id} for user {current_user.id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to archive article. Please try again.")
+    
     return {"message": "Article moved to archived", "article_id": article_id}
 
 
@@ -825,9 +843,16 @@ async def restore_article(
         user_state.is_deleted = False
         user_state.deleted_at = None
         user_state.is_read = False
-        db.commit()
+        try:
+            db.commit()
+            logger.info(f"API: Article {article_id} restored for user {current_user.id}")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"API: Error restoring article {article_id} for user {current_user.id}: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Failed to restore article. Please try again.")
+    else:
+        logger.info(f"API: Article {article_id} restore skipped - no user state found for user {current_user.id}")
     
-    logger.info(f"API: Article {article_id} restored for user {current_user.id}")
     return {"message": "Article restored", "article_id": article_id}
 
 
@@ -846,9 +871,14 @@ async def purge_article(
     ).first()
     
     if user_state:
-        db.delete(user_state)
-        db.commit()
-        logger.info(f"API: User {current_user.id} purged article state for article {article_id}")
+        try:
+            db.delete(user_state)
+            db.commit()
+            logger.info(f"API: User {current_user.id} purged article state for article {article_id}")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"API: Error purging article {article_id} for user {current_user.id}: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Failed to purge article. Please try again.")
     
     return {"message": "Article purged", "article_id": article_id}
 

@@ -180,13 +180,19 @@ async def register(request: RegisterRequest, db: SQLAlchemySession = Depends(dat
         email=request.email,
         password_hash=password_hash
     )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
     
-    user_settings = database.UserSettings(user_id=user.id)
-    db.add(user_settings)
-    db.commit()
+    try:
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        
+        user_settings = database.UserSettings(user_id=user.id)
+        db.add(user_settings)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"AUTH: Error registering user {request.email}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Registration failed. Please try again.")
     
     token = create_access_token(user.id, user.email)
     
@@ -221,28 +227,12 @@ async def login(request: LoginRequest, db: SQLAlchemySession = Depends(database.
             detail="Invalid email or password"
         )
     
-    user.last_login_at = datetime.now(timezone.utc)
-    db.commit()
-    
-    token = create_access_token(user.id, user.email)
-    
-    logger.info(f"AUTH: User logged in: {user.email}")
-    
-    return AuthResponse(
-        access_token=token,
-        user_id=user.id,
-        email=user.email,
-        is_admin=getattr(user, 'is_admin', False)
-    )
-    
-    if not verify_password(request.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
-        )
-    
-    user.last_login_at = datetime.now(timezone.utc)
-    db.commit()
+    try:
+        user.last_login_at = datetime.now(timezone.utc)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"AUTH: Error updating last_login_at for user {user.email}: {e}", exc_info=True)
     
     token = create_access_token(user.id, user.email)
     
@@ -284,9 +274,13 @@ async def delete_account(
     user_id = current_user.id
     user_email = current_user.email
     
-    db.delete(current_user)
-    db.commit()
-    
-    logger.info(f"AUTH: User deleted account: {user_email}")
+    try:
+        db.delete(current_user)
+        db.commit()
+        logger.info(f"AUTH: User deleted account: {user_email}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"AUTH: Error deleting account for user {user_email}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to delete account. Please try again.")
     
     return MessageResponse(message="Account deleted successfully")
