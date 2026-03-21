@@ -125,6 +125,7 @@ function removeToast(toast) {
 let resultsContainer, loadingIndicator, loadingText, infiniteScrollLoadingIndicator,
     activeTagFiltersDisplay, mobileActiveTagFiltersDisplay,
     mainFeedSection, setupSection, navMainBtn, navFavoritesBtn, navDeletedBtn, navSettingsBtn,
+    navInEventsBtn, navIntelligenceBtn,
     regenerateSummaryModal, closeRegenerateModalBtn, modalArticleIdInput, modalSummaryPromptInput, modalUseDefaultPromptBtn,
     fullArticleModal, closeFullArticleModalBtn, fullArticleModalTitle, fullArticleModalBody, fullArticleModalOriginalLink;
 
@@ -238,6 +239,8 @@ export function initializeUIDOMReferences() {
     navFavoritesBtn = document.getElementById('nav-favorites-btn');
     navDeletedBtn = document.getElementById('nav-deleted-btn');
     navSettingsBtn = document.getElementById('nav-settings-btn');
+    navInEventsBtn = document.getElementById('nav-in-events-btn');
+    navIntelligenceBtn = document.getElementById('nav-intelligence-btn');
 
     regenerateSummaryModal = document.getElementById('regenerate-summary-modal');
     closeRegenerateModalBtn = document.getElementById('close-regenerate-modal-btn');
@@ -360,6 +363,7 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
     const filteredArticles = articles.filter(article => {
         if (!article.is_summarizable) return false;
         if (state.activeView === 'favorites' && !article.is_favorite) return false;
+        if (state.activeView === 'in_events' && article.event_ids && article.event_ids.length > 0) return false;
         return true;
     });
 
@@ -449,9 +453,21 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         addToEventBtn.innerHTML = '&#9978;';
         addToEventBtn.onclick = (e) => {
             e.stopPropagation();
-            showAddToEventDropdown(article.id, addToEventBtn);
+            showAddToEventDropdown(article.id, addToEventBtn, article.event_ids || []);
         };
         actionsRow.appendChild(addToEventBtn);
+
+        if (article.event_ids?.length > 0) {
+            const eventCount = article.event_ids.length;
+            const eventIndicator = document.createElement('span');
+            eventIndicator.classList.add('event-indicator');
+            if (eventCount === 1 && article.event_names?.[0]) {
+                eventIndicator.textContent = article.event_names[0];
+            } else if (eventCount >= 2) {
+                eventIndicator.textContent = '2+ events';
+            }
+            actionsRow.appendChild(eventIndicator);
+        }
 
         articleCard.appendChild(actionsRow);
 
@@ -663,7 +679,7 @@ export function updateFeedFilterButtonStyles() {
  * Updates the visual style of the main navigation buttons (Main, Favorites, Deleted, Settings).
  */
 export function updateNavButtonStyles() {
-    const buttons = [navMainBtn, navFavoritesBtn, navDeletedBtn, navSettingsBtn];
+    const buttons = [navMainBtn, navFavoritesBtn, navDeletedBtn, navSettingsBtn, navInEventsBtn, navIntelligenceBtn];
     
     buttons.forEach(btn => {
         if (btn) btn.classList.remove('active');
@@ -679,12 +695,22 @@ export function updateNavButtonStyles() {
             if (navSettingsBtn) navSettingsBtn.classList.add('active');
             return;
         }
+        if (currentVisibleSection.id === 'intelligence-section') {
+            if (navIntelligenceBtn) navIntelligenceBtn.classList.add('active');
+            return;
+        }
     }
 
-    if (state.activeView === 'favorites') {
+    if (state.activeView === 'main') {
+        if (navMainBtn) navMainBtn.classList.add('active');
+    } else if (state.activeView === 'favorites') {
         if (navFavoritesBtn) navFavoritesBtn.classList.add('active');
     } else if (state.activeView === 'deleted') {
         if (navDeletedBtn) navDeletedBtn.classList.add('active');
+    } else if (state.activeView === 'in_events') {
+        if (navInEventsBtn) navInEventsBtn.classList.add('active');
+    } else if (state.activeView === 'intelligence') {
+        if (navIntelligenceBtn) navIntelligenceBtn.classList.add('active');
     }
 }
 
@@ -909,9 +935,15 @@ export function setResultsContainerContent(htmlContent) {
 }
 
 let activeAddToEventDropdown = null;
+let activeDropdownArticleId = null;
+let activeDropdownButtonElement = null;
+let activeDropdownEventIds = null;
 
-export async function showAddToEventDropdown(articleId, buttonElement) {
+export async function showAddToEventDropdown(articleId, buttonElement, articleEventIds = []) {
     closeAddToEventDropdown();
+    activeDropdownArticleId = articleId;
+    activeDropdownButtonElement = buttonElement;
+    activeDropdownEventIds = articleEventIds || [];
 
     try {
         const events = await eventApi.fetchEvents();
@@ -924,16 +956,31 @@ export async function showAddToEventDropdown(articleId, buttonElement) {
             dropdown.innerHTML += '<div class="dropdown-empty">No events yet. Create one in Intelligence.</div>';
         } else {
             events.forEach(event => {
+                const isInEvent = activeDropdownEventIds.includes(event.id);
                 const item = document.createElement('div');
-                item.className = 'dropdown-item';
-                item.textContent = event.name;
+                item.className = 'dropdown-item' + (isInEvent ? ' checked' : '');
+                item.innerHTML = (isInEvent ? '✓ ' : '+ ') + event.name;
                 item.onclick = async () => {
                     try {
-                        await eventApi.addArticlesToEvent(event.id, [articleId]);
-                        showToast(`Added to "${event.name}"`, 'success');
+                        if (isInEvent) {
+                            await eventApi.removeArticleFromEvent(event.id, articleId);
+                            showToast(`Removed from "${event.name}"`, 'success');
+                            activeDropdownEventIds = activeDropdownEventIds.filter(id => id !== event.id);
+                            if (activeDropdownEventIds.length === 0 && activeDropdownButtonElement) {
+                                activeDropdownButtonElement.classList.remove('has-events');
+                            }
+                        } else {
+                            await eventApi.addArticlesToEvent(event.id, [articleId]);
+                            showToast(`Added to "${event.name}"`, 'success');
+                            activeDropdownEventIds.push(event.id);
+                            if (activeDropdownButtonElement) {
+                                activeDropdownButtonElement.classList.add('has-events');
+                            }
+                        }
+                        updateArticleCardEventIds(articleId, activeDropdownEventIds);
                     } catch (error) {
-                        console.error('Error adding article to event:', error);
-                        showToast('Failed to add article to event', 'error');
+                        console.error('Error updating article event:', error);
+                        showToast('Failed to update article event', 'error');
                     }
                     closeAddToEventDropdown();
                 };
@@ -957,6 +1004,13 @@ export async function showAddToEventDropdown(articleId, buttonElement) {
     } catch (error) {
         console.error('Error fetching events for dropdown:', error);
         showToast('Failed to load events', 'error');
+    }
+}
+
+function updateArticleCardEventIds(articleId, eventIds) {
+    const articleCard = document.getElementById(`article-db-${articleId}`);
+    if (articleCard) {
+        articleCard.dataset.eventIds = JSON.stringify(eventIds);
     }
 }
 

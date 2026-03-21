@@ -28,6 +28,7 @@ from ..schemas import (
 )
 from ..dependencies import get_llm_summary, get_llm_tag
 from .auth_routes import get_current_user
+from ..intelligence.models import ArticleEvent as IntelligenceArticleEvent, Event as IntelligenceEvent
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/articles", tags=["articles"])
@@ -288,6 +289,27 @@ async def get_news_summaries_endpoint(
                 article_tags_map[art_id] = []
             article_tags_map[art_id].append(ArticleTagResponse(id=tag_id, name=tag_name))
     
+    article_event_ids_map = {}
+    article_event_names_map = {}
+    if article_ids_on_page:
+        event_rows = db.query(
+            IntelligenceArticleEvent.article_id,
+            IntelligenceArticleEvent.event_id,
+            IntelligenceEvent.name
+        ).join(
+            IntelligenceEvent,
+            IntelligenceArticleEvent.event_id == IntelligenceEvent.id
+        ).filter(
+            IntelligenceEvent.user_id == current_user.id,
+            IntelligenceArticleEvent.article_id.in_(article_ids_on_page)
+        ).all()
+        for art_id, evt_id, evt_name in event_rows:
+            if art_id not in article_event_ids_map:
+                article_event_ids_map[art_id] = []
+                article_event_names_map[art_id] = []
+            article_event_ids_map[art_id].append(evt_id)
+            article_event_names_map[art_id].append(evt_name)
+    
     results_on_page: List[ArticleResult] = []
     articles_needing_ondemand_scrape: List[database.Article] = []
     
@@ -314,7 +336,9 @@ async def get_news_summaries_endpoint(
             user_read_ids=user_read_ids,
             user_deleted_ids=user_deleted_ids,
             chat_history_article_ids=chat_history_article_ids,
-            article_tags_map=article_tags_map
+            article_tags_map=article_tags_map,
+            article_event_ids_map=article_event_ids_map,
+            article_event_names_map=article_event_names_map
         )
         results_on_page.append(article_result)
 

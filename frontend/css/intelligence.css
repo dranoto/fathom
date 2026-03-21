@@ -390,3 +390,22 @@
 .add-to-event-dropdown .dropdown-item:active {
     background: #e8f4fd;
 }
+
+.add-to-event-dropdown .dropdown-item.checked {
+    color: #27ae60;
+    font-weight: bold;
+}
+
+/* Article card tent icon highlight when in events */
+.article-card .add-to-event-btn.has-events {
+    background-color: rgba(39, 174, 96, 0.15);
+    border-radius: 4px;
+}
+
+/* Event indicator text next to tent button */
+.article-card .event-indicator {
+    font-size: 11px;
+    color: #27ae60;
+    font-weight: 500;
+    margin-left: 4px;
+}

@@ -46,7 +46,9 @@ def _create_article_result(
     user_read_ids: Optional[set[int]] = None,
     user_deleted_ids: Optional[set[int]] = None,
     chat_history_article_ids: Optional[set[int]] = None,
-    article_tags_map: Optional[dict[int, list[ArticleTagResponse]]] = None
+    article_tags_map: Optional[dict[int, list[ArticleTagResponse]]] = None,
+    article_event_ids_map: Optional[dict[int, list[int]]] = None,
+    article_event_names_map: Optional[dict[int, list[str]]] = None
 ) -> ArticleResult:
     """
     Creates an ArticleResult Pydantic model from an Article database object.
@@ -75,6 +77,9 @@ def _create_article_result(
 
     tags = article_tags_map.get(article_id, []) if article_tags_map else []
 
+    event_ids = article_event_ids_map.get(article_id, []) if article_event_ids_map else []
+    event_names = article_event_names_map.get(article_id, []) if article_event_names_map else []
+
     return ArticleResult(
         id=article_db_obj.id,
         title=article_db_obj.title,
@@ -92,5 +97,7 @@ def _create_article_result(
         error_message=error_message,
         rss_description=article_db_obj.rss_description,
         word_count=article_db_obj.word_count,
-        has_chat_history=has_chat_history
+        has_chat_history=has_chat_history,
+        event_ids=event_ids,
+        event_names=event_names
     )

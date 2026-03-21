@@ -73,6 +73,8 @@ class ArticleResult(BaseModel):
     is_summarizable: bool = False
     word_count: Optional[int] = None
     has_chat_history: bool = False
+    event_ids: List[int] = []
+    event_names: List[str] = []
     class Config: from_attributes = True
 
 class PaginatedSummariesAPIResponse(BaseModel):

@@ -129,7 +129,7 @@ export function setCurrentKeywordSearch(keyword) {
 }
 
 export function setActiveView(view) {
-    if (view === 'main' || view === 'favorites' || view === 'deleted' || view === 'settings' || view === 'admin' || view === 'intelligence') {
+    if (view === 'main' || view === 'favorites' || view === 'deleted' || view === 'settings' || view === 'admin' || view === 'intelligence' || view === 'in_events') {
         activeView = view;
     } else {
         console.warn(`State: Invalid view '${view}' provided to setActiveView.`);

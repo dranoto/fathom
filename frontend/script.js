@@ -540,6 +540,40 @@ function setupGlobalEventListeners() {
         });
     }
 
+    const navInEventsBtn = document.getElementById('nav-in-events-btn');
+    if (navInEventsBtn) {
+        navInEventsBtn.addEventListener('click', () => {
+            console.log('No Events button clicked, current view:', state.activeView);
+            if (state.activeView === 'in_events') {
+                state.setActiveView('main');
+                const mainSectionTitle = document.querySelector('#main-feed-section h2');
+                if(mainSectionTitle) mainSectionTitle.textContent = 'Latest Summaries';
+                state.setActiveFeedFilterIds([]);
+                state.setActiveTagFilterIds([]);
+                state.setCurrentKeywordSearch(null);
+                const keywordInput = document.getElementById('keyword-search-input');
+                if(keywordInput) keywordInput.value = '';
+                state.setCurrentPage(1);
+                uiManager.showSection('main-feed-section');
+                uiManager.updateNavButtonStyles();
+                fetchAndDisplaySummaries(false, 1, null);
+            } else {
+                state.setActiveView('in_events');
+                state.setActiveFeedFilterIds([]);
+                state.setActiveTagFilterIds([]);
+                state.setCurrentKeywordSearch(null);
+                const keywordInput = document.getElementById('keyword-search-input');
+                if(keywordInput) keywordInput.value = '';
+                state.setCurrentPage(1);
+                uiManager.showSection('main-feed-section');
+                const mainSectionTitle = document.querySelector('#main-feed-section h2');
+                if(mainSectionTitle) mainSectionTitle.textContent = 'No Events';
+                uiManager.updateNavButtonStyles();
+                fetchAndDisplaySummaries(false, 1, null);
+            }
+        });
+    }
+
     const navDeletedBtn = document.getElementById('nav-deleted-btn');
     if (navDeletedBtn) {
         navDeletedBtn.addEventListener('click', () => {
