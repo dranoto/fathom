@@ -84,6 +84,42 @@ export function refreshMuuriItem(articleCard) {
     }
 }
 
+// --- Toast Notifications ---
+let toastContainer = null;
+
+export function showToast(message, type = 'info', duration = 3000) {
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.className = 'toast-container';
+        document.body.appendChild(toastContainer);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `
+        <span class="toast-message">${message}</span>
+        <button class="toast-close" aria-label="Close">&times;</button>
+    `;
+
+    toastContainer.appendChild(toast);
+
+    const closeBtn = toast.querySelector('.toast-close');
+    closeBtn.addEventListener('click', () => removeToast(toast));
+
+    if (duration > 0) {
+        setTimeout(() => removeToast(toast), duration);
+    }
+
+    return toast;
+}
+
+function removeToast(toast) {
+    if (!toast.classList.contains('toast-exit')) {
+        toast.classList.add('toast-exit');
+        setTimeout(() => toast.remove(), 300);
+    }
+}
+
 // --- DOM Element References ---
 let resultsContainer, loadingIndicator, loadingText, infiniteScrollLoadingIndicator,
     activeTagFiltersDisplay, mobileActiveTagFiltersDisplay,
@@ -127,7 +163,7 @@ async function handleReadToggle(articleId, readBtn, articleCard) {
         }
     } catch (error) {
         console.error('Error toggling read state:', error);
-        alert('Error updating read state');
+        showToast('Error updating read state', 'error');
     }
 }
 

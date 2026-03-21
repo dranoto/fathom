@@ -105,22 +105,26 @@
         padding: 10px 15px;
         font-size: 0.9em;
     }
-    .regenerate-summary-btn { /* Smaller regenerate button */
-        width: 28px;
-        height: 28px;
-        line-height: 28px;
-        font-size: 14px;
+    .card-actions-row {
+        gap: 10px;
+    }
+    .regenerate-summary-btn,
+    .read-checkbox-btn,
+    .delete-article-btn,
+    .favorite-btn {
+        width: 36px;
+        height: 36px;
     }
     .article-card h3 {
         font-size: 1.3em;
     }
     .open-chat-modal-btn {
         font-size: 0.85em;
-        padding: 7px 12px;
+        padding: 10px 16px;
     }
     .article-tag {
-        font-size: 0.75em;
-        padding: 4px 8px;
+        font-size: 0.8em;
+        padding: 8px 12px;
     }
     .article-card {
         width: 100%;

@@ -1,6 +1,7 @@
 // frontend/js/feedHandler.js
 import * as state from './state.js';
 import * as apiService from './apiService.js';
+import * as uiManager from './uiManager.js';
 
 let addRssFeedForm, rssFeedUrlInput, rssFeedNameInput, rssFeedsListUI;
 let publicFeedsSelect, addFromDropdownBtn;
@@ -89,7 +90,7 @@ function renderUserFeedsList() {
                     if (refreshMainFeedFilterButtonsCallback) refreshMainFeedFilterButtonsCallback();
                 } catch (error) {
                     console.error("FeedHandler: Error updating feed:", error);
-                    alert(`Error updating feed: ${error.message}`);
+                    uiManager.showToast(`Error updating feed: ${error.message}`, 'error');
                 }
             })();
         };
@@ -106,7 +107,7 @@ function renderUserFeedsList() {
                 if (refreshMainFeedFilterButtonsCallback) refreshMainFeedFilterButtonsCallback();
             } catch (error) {
                 console.error("FeedHandler: Error removing feed:", error);
-                alert(`Error removing feed: ${error.message}`);
+                uiManager.showToast(`Error removing feed: ${error.message}`, 'error');
             }
         };
         tag.appendChild(removeBtn);
@@ -133,7 +134,7 @@ async function handleAddFromDropdown() {
     
     const selectedUrl = publicFeedsSelectEl.value;
     if (!selectedUrl) {
-        alert('Please select a feed from the dropdown');
+        uiManager.showToast('Please select a feed from the dropdown', 'warning');
         return;
     }
 
@@ -143,7 +144,7 @@ async function handleAddFromDropdown() {
         if (refreshMainFeedFilterButtonsCallback) refreshMainFeedFilterButtonsCallback();
     } catch (error) {
         console.error("FeedHandler: Error adding feed from dropdown:", error);
-        alert(`Error adding feed: ${error.message}`);
+        uiManager.showToast(`Error adding feed: ${error.message}`, 'error');
     }
 }
 
@@ -155,14 +156,14 @@ async function handleAddNewFeed(event) {
     const name = rssFeedNameInput?.value.trim();
 
     if (!url) {
-        alert('Feed URL is required');
+        uiManager.showToast('Feed URL is required', 'warning');
         return;
     }
 
     try {
         new URL(url);
     } catch (_) {
-        alert('Invalid URL format');
+        uiManager.showToast('Invalid URL format', 'error');
         return;
     }
 
@@ -174,7 +175,7 @@ async function handleAddNewFeed(event) {
         if (refreshMainFeedFilterButtonsCallback) refreshMainFeedFilterButtonsCallback();
     } catch (error) {
         console.error("FeedHandler: Error adding new feed:", error);
-        alert(`Error adding feed: ${error.message}`);
+        uiManager.showToast(`Error adding feed: ${error.message}`, 'error');
     }
 }
 

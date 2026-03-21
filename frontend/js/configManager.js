@@ -1,6 +1,7 @@
 // frontend/js/configManager.js
 import * as state from './state.js';
 import * as apiService from './apiService.js';
+import * as uiManager from './uiManager.js';
 
 /**
  * This module handles loading, saving, and applying application configurations.
@@ -98,11 +99,11 @@ async function saveConfiguration() {
         const response = await apiService.updateConfig({ settings: settingsToSave });
 
         console.log("ConfigManager: Save successful.", response);
-        alert('Settings saved successfully!');
+        uiManager.showToast('Settings saved successfully!', 'success');
 
     } catch (error) {
         console.error('Failed to save configuration:', error);
-        alert('Error saving settings. Please check the console for details and refresh the page.');
+        uiManager.showToast('Error saving settings. Please check the console for details.', 'error');
     }
 }
 
@@ -113,7 +114,7 @@ export async function saveContentPreferences(articlesPerPage, callback) {
     const newArticlesPerPage = parseInt(articlesPerPage);
 
     if (isNaN(newArticlesPerPage) || newArticlesPerPage < 1 || newArticlesPerPage > 50) {
-        alert('Please enter a number of articles per page between 1 and 50.');
+        uiManager.showToast('Please enter a number of articles per page between 1 and 50.', 'error');
         return;
     }
 
@@ -140,13 +141,13 @@ export async function saveContentPreferences(articlesPerPage, callback) {
  */
 export function saveAiPrompts(newSummaryPrompt, newChatPrompt, newTagGenerationPrompt) {
     if (newSummaryPrompt && !newSummaryPrompt.includes("{text}")) {
-        alert("Summary prompt must contain the placeholder {text}."); return;
+        uiManager.showToast("Summary prompt must contain the placeholder {text}.", 'error'); return;
     }
     if (newTagGenerationPrompt && !newTagGenerationPrompt.includes("{text}")) {
-        alert("Tag Generation prompt must contain the placeholder {text}."); return;
+        uiManager.showToast("Tag Generation prompt must contain the placeholder {text}.", 'error'); return;
     }
     if (newChatPrompt && !newChatPrompt.includes("{question}")) {
-        alert("Chat prompt should ideally include {question}. It's also recommended to include {article_text}.");
+        uiManager.showToast("Chat prompt should ideally include {question}. It's also recommended to include {article_text}.", 'warning');
     }
 
     state.setCurrentPrompts(

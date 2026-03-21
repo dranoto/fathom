@@ -1,6 +1,7 @@
 // frontend/js/chatHandler.js
 import * as state from './state.js';
 import * as apiService from './apiService.js';
+import * as uiManager from './uiManager.js';
 // Assuming 'marked' library is available globally for Markdown parsing.
 
 /**
@@ -162,7 +163,7 @@ async function handleModalArticleChatSubmit() {
     const articleDbId = state.currentArticleForChat.id;
     const question = chatModalQuestionInput.value.trim();
     if (!question) {
-        alert('Please enter a question.');
+        uiManager.showToast('Please enter a question.', 'warning');
         return;
     }
 
@@ -228,6 +229,12 @@ export function setupChatModalEventListeners() {
 
     window.addEventListener('click', function(event) {
         if (event.target === articleChatModal) {
+            closeArticleChatModal();
+        }
+    });
+
+    window.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' && articleChatModal && articleChatModal.style.display === 'block') {
             closeArticleChatModal();
         }
     });

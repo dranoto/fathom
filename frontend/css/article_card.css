@@ -360,3 +360,30 @@
     display: flex;
     align-items: center;
 }
+
+/* Empty State Styling */
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #7f8c8d;
+}
+
+.empty-state-icon {
+    font-size: 48px;
+    display: block;
+    margin-bottom: 16px;
+}
+
+.empty-state p {
+    margin: 8px 0;
+    font-size: 16px;
+}
+
+.empty-state a {
+    color: #3498db;
+    text-decoration: none;
+}
+
+.empty-state a:hover {
+    text-decoration: underline;
+}

@@ -105,9 +105,9 @@ async function fetchAndDisplaySummaries(forceBackendRssRefresh = false, page = s
         }
 
         if (page === 1 && data.processed_articles_on_page.length === 0 && data.total_articles_available === 0) {
-            let noResultsMessage = `<p>No articles found for the current filter (${activeFilterDisplay}).</p>`;
+            let noResultsMessage = `<div class="empty-state"><span class="empty-state-icon">📰</span><p>No articles found for the current filter (${activeFilterDisplay}).</p></div>`;
             if (state.dbFeedSources.length === 0 && state.activeTagFilterIds.length === 0 && !keyword) {
-                noResultsMessage = '<p>No RSS feeds configured. Please add some in the Setup tab or try searching.</p>';
+                noResultsMessage = `<div class="empty-state"><span class="empty-state-icon">📡</span><p>No RSS feeds configured.</p><p><a href="#" onclick="document.getElementById('nav-settings-btn').click(); return false;">Add your first feed in Settings</a></p></div>`;
             }
             uiManager.setResultsContainerContent(noResultsMessage);
         }
@@ -201,7 +201,7 @@ async function initializeAppSettings() {
         if (state.dbFeedSources.length > 0 || state.activeTagFilterIds.length > 0 || state.currentKeywordSearch) {
             await fetchAndDisplaySummaries(false, 1, state.currentKeywordSearch);
         } else {
-            uiManager.setResultsContainerContent('<p>No RSS feeds configured. Please add some in the Setup tab, or try searching.</p>');
+            uiManager.setResultsContainerContent('<div class="empty-state"><span class="empty-state-icon">📡</span><p>No RSS feeds configured.</p><p><a href="#" onclick="document.getElementById(\'nav-settings-btn\').click(); return false;">Add your first feed in Settings</a></p></div>');
         }
 
         if (pollingIntervalId) clearInterval(pollingIntervalId); 
@@ -410,7 +410,7 @@ async function handleFavoriteClick(articleId, favoriteButtonElement) {
         }
     } catch (error) {
         console.error("MainScript: Error toggling favorite status:", error);
-        alert(`Failed to update favorite status: ${error.message}`);
+        uiManager.showToast(`Failed to update favorite status: ${error.message}`, 'error');
     }
 }
 
@@ -418,11 +418,11 @@ async function handleRegenerateSummaryFormSubmit(event) {
     event.preventDefault();
     const articleIdEl = document.getElementById('modal-article-id-input');
     const customPromptEl = document.getElementById('modal-summary-prompt-input');
-    if (!articleIdEl || !customPromptEl) { alert("Error: Could not find modal elements."); return; }
+    if (!articleIdEl || !customPromptEl) { uiManager.showToast("Error: Could not find modal elements.", 'error'); return; }
     const articleId = articleIdEl.value;
     let customPrompt = customPromptEl.value.trim();
-    if (!articleId) { alert("Error: Article ID not found for regeneration."); return; }
-    if (customPrompt && !customPrompt.includes("{text}")) { alert("The custom prompt must include the placeholder {text}."); return; }
+    if (!articleId) { uiManager.showToast("Error: Article ID not found for regeneration.", 'error'); return; }
+    if (customPrompt && !customPrompt.includes("{text}")) { uiManager.showToast("The custom prompt must include the placeholder {text}.", 'error'); return; }
     if (!customPrompt) customPrompt = null;
 
     uiManager.closeRegenerateSummaryModal();
@@ -460,7 +460,7 @@ async function summarizeArticle(articleId, customPrompt) {
             errorP.textContent = `Error: ${error.message}`;
             summaryElement.appendChild(errorP);
         }
-        alert(`Failed to regenerate summary: ${error.message}`);
+        uiManager.showToast(`Failed to regenerate summary: ${error.message}`, 'error');
     } finally {
         if (regenButtonOnCard) regenButtonOnCard.disabled = false;
         if (summarizeButton) summarizeButton.disabled = false;
@@ -670,7 +670,7 @@ function setupGlobalEventListeners() {
                 pollForRefreshCompletion();
             } catch (error) {
                 console.error("MainScript: Error triggering RSS refresh:", error);
-                alert(`Error triggering refresh: ${error.message}`);
+                uiManager.showToast(`Error triggering refresh: ${error.message}`, 'error');
                 uiManager.showLoadingIndicator(false);
             }
         });
@@ -845,14 +845,14 @@ function pollForRefreshCompletion() {
                 timeWaited += pollInterval;
                 if (timeWaited >= maxPollTime) {
                     clearInterval(intervalId);
-                    alert("The refresh is taking longer than expected. The process will continue in the background, and new articles will appear when ready.");
+                    uiManager.showToast("The refresh is taking longer than expected. The process will continue in the background.", 'warning');
                     uiManager.showLoadingIndicator(false);
                 }
             }
         } catch (error) {
             clearInterval(intervalId);
             console.error("MainScript: Error polling for refresh completion:", error);
-            alert("An error occurred while checking the refresh status.");
+            uiManager.showToast("An error occurred while checking the refresh status.", 'error');
             uiManager.showLoadingIndicator(false);
         }
     }, pollInterval);
@@ -954,7 +954,7 @@ async function loadArchivedArticles(page = 1) {
                     await apiService.restoreArticle(parseInt(id));
                     await loadArchivedArticles(archivedArticlesPage);
                 } catch (error) {
-                    alert('Error restoring article');
+                    uiManager.showToast('Error restoring article', 'error');
                 }
             });
         });
@@ -1052,7 +1052,7 @@ async function handleLoginSubmit(event) {
     const password = document.getElementById('login-password')?.value;
     
     if (!email || !password) {
-        alert('Please enter email and password');
+        uiManager.showToast('Please enter email and password', 'warning');
         return;
     }
     
@@ -1063,7 +1063,7 @@ async function handleLoginSubmit(event) {
         initializeAllDOMReferences();
         await initializeAppSettings();
     } catch (error) {
-        alert(`Login failed: ${error.message}`);
+        uiManager.showToast(`Login failed: ${error.message}`, 'error');
     }
 }
 
@@ -1074,12 +1074,12 @@ async function handleRegisterSubmit(event) {
     const passwordConfirm = document.getElementById('register-password-confirm')?.value;
     
     if (!email || !password) {
-        alert('Please enter email and password');
+        uiManager.showToast('Please enter email and password', 'warning');
         return;
     }
     
     if (password !== passwordConfirm) {
-        alert('Passwords do not match');
+        uiManager.showToast('Passwords do not match', 'warning');
         return;
     }
     
@@ -1090,7 +1090,7 @@ async function handleRegisterSubmit(event) {
         initializeAllDOMReferences();
         await initializeAppSettings();
     } catch (error) {
-        alert(`Registration failed: ${error.message}`);
+        uiManager.showToast(`Registration failed: ${error.message}`, 'error');
     }
 }
 
@@ -1133,7 +1133,7 @@ async function handleDeleteAccountSubmit(event) {
     const confirm = document.getElementById('delete-account-confirm')?.value;
     
     if (confirm !== 'DELETE') {
-        alert('Please type DELETE to confirm');
+        uiManager.showToast('Please type DELETE to confirm', 'warning');
         return;
     }
     
@@ -1141,10 +1141,10 @@ async function handleDeleteAccountSubmit(event) {
         await apiService.deleteAccount(confirm);
         closeDeleteAccountModal();
         updateAuthUI();
-        alert('Account deleted successfully');
+        uiManager.showToast('Account deleted successfully', 'success');
         window.location.reload();
     } catch (error) {
-        alert(`Failed to delete account: ${error.message}`);
+        uiManager.showToast(`Failed to delete account: ${error.message}`, 'error');
     }
 }
 
