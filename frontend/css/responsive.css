@@ -45,7 +45,7 @@
     }
     .muuri-item {
         width: 100%;
-        position: relative; /* Stack vertically on mobile */
+        /* Let Muuri handle positioning - do not override position */
     }
     .feed-filters { /* Adjust padding for smaller screens */
         padding-left: 10px; 
@@ -124,6 +124,6 @@
     }
     .article-card {
         width: 100%;
-        padding: 0 5px;
+        padding: 10px 5px 10px 5px;
     }
 }
