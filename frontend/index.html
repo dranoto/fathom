@@ -114,11 +114,17 @@
                         <div id="intelligence-event-header" class="intelligence-event-header">
                             <p class="no-event-selected">Select an event from the sidebar or create a new one.</p>
                         </div>
-                        <div id="intelligence-timeline" class="intelligence-timeline">
-                        </div>
                         <div id="intelligence-summary" class="intelligence-summary">
                         </div>
                         <div id="intelligence-chat" class="intelligence-chat">
+                        </div>
+                        <div id="intelligence-articles-section" class="intelligence-articles-section">
+                            <div class="articles-section-header" onclick="window.intelligenceManager.toggleArticlesList()">
+                                <h3>Articles (<span id="articles-count">0</span>)</h3>
+                                <span id="articles-toggle-icon">▼</span>
+                            </div>
+                            <div id="intelligence-timeline" class="intelligence-timeline">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -429,6 +435,42 @@
                     <button type="submit" class="nav-button" style="background: #1abc9c; color: white; border-color: #1abc9c;">Save Changes</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Event Settings Modal -->
+    <div id="event-settings-modal" class="modal">
+        <div class="modal-content event-settings-modal-content">
+            <div class="modal-header">
+                <h2>Event Settings</h2>
+                <button id="close-event-settings" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="event-meta-edit">
+                    <input type="hidden" id="settings-event-id">
+                    <div class="form-group">
+                        <label for="settings-event-name">Name</label>
+                        <input type="text" id="settings-event-name">
+                    </div>
+                    <div class="form-group">
+                        <label for="settings-event-desc">Description</label>
+                        <textarea id="settings-event-desc" rows="2"></textarea>
+                    </div>
+                    <button id="btn-save-event-meta" class="submit-button">Save</button>
+                </div>
+                <div class="current-articles-section">
+                    <h3>Current Articles (<span id="current-article-count">0</span>)</h3>
+                    <div id="current-articles-list" class="article-list"></div>
+                </div>
+                <div class="add-articles-section">
+                    <h3>Add Articles</h3>
+                    <div class="search-row">
+                        <input type="text" id="settings-article-search" placeholder="Search articles to add...">
+                        <button id="btn-search-settings-articles" class="submit-button">Search</button>
+                    </div>
+                    <div id="settings-search-results" class="search-results-list"></div>
+                </div>
+            </div>
         </div>
     </div>
 

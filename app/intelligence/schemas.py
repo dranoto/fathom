@@ -8,6 +8,7 @@ class EventSummaryData(BaseModel):
     timeline_narrative: str
     cross_source_synthesis: str
     progressive_summary: str
+    article_ids: Optional[List[int]] = []
     article_count: Optional[int] = None
     feed_count: Optional[int] = None
     date_range: Optional[str] = None
@@ -90,6 +91,7 @@ class EventSummaryResponse(BaseModel):
     id: int
     event_id: int
     summary_json: EventSummaryData
+    article_ids: List[int] = []
     generated_at: datetime
     article_count: int
 

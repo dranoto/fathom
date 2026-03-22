@@ -969,6 +969,9 @@ export async function showAddToEventDropdown(articleId, buttonElement, articleEv
                             if (activeDropdownEventIds.length === 0 && activeDropdownButtonElement) {
                                 activeDropdownButtonElement.classList.remove('has-events');
                             }
+                            window.dispatchEvent(new CustomEvent('event:articleRemoved', { 
+                                detail: { eventId: event.id, articleId } 
+                            }));
                         } else {
                             await eventApi.addArticlesToEvent(event.id, [articleId]);
                             showToast(`Added to "${event.name}"`, 'success');
@@ -976,6 +979,9 @@ export async function showAddToEventDropdown(articleId, buttonElement, articleEv
                             if (activeDropdownButtonElement) {
                                 activeDropdownButtonElement.classList.add('has-events');
                             }
+                            window.dispatchEvent(new CustomEvent('event:articleAdded', { 
+                                detail: { eventId: event.id, articleId } 
+                            }));
                         }
                         updateArticleCardEventIds(articleId, activeDropdownEventIds);
                     } catch (error) {

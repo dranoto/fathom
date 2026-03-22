@@ -20,8 +20,8 @@ DEFAULT_CHAT_MODEL_NAME = os.getenv("DEFAULT_CHAT_MODEL_NAME", "gpt-4o-mini")
 DEFAULT_TAG_MODEL_NAME = os.getenv("DEFAULT_TAG_MODEL_NAME", "gpt-4o-mini")
 
 # Max output tokens for different LLM tasks
-SUMMARY_MAX_OUTPUT_TOKENS = int(os.getenv("SUMMARY_MAX_OUTPUT_TOKENS", 1024))
-CHAT_MAX_OUTPUT_TOKENS = int(os.getenv("CHAT_MAX_OUTPUT_TOKENS", 4096))
+SUMMARY_MAX_OUTPUT_TOKENS = int(os.getenv("SUMMARY_MAX_OUTPUT_TOKENS", 8192))
+CHAT_MAX_OUTPUT_TOKENS = int(os.getenv("CHAT_MAX_OUTPUT_TOKENS", 8192))
 TAG_MAX_OUTPUT_TOKENS = int(os.getenv("TAG_MAX_OUTPUT_TOKENS", 100))
 
 # --- RSS Feed Configuration ---

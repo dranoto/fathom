@@ -42,6 +42,7 @@ class EventSummary(Base):
     id = Column(Integer, primary_key=True, index=True)
     event_id = Column(Integer, ForeignKey("events.id", ondelete='CASCADE'), nullable=False, index=True)
     summary_json = Column(JSON, nullable=False)
+    article_ids = Column(JSON, nullable=True)
     generated_at = Column(DateTime(timezone=True), server_default=func.now())
     article_count = Column(Integer, nullable=False)
 

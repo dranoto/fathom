@@ -9,7 +9,7 @@ from app import database, settings_database
 from app import config as app_config
 from app.routers.auth_routes import get_current_user
 from app.security import get_user_feed_source_ids
-from app.dependencies import get_llm_summary
+from app.dependencies import get_llm_summary, get_llm_chat
 from app.intelligence.models import Event, ArticleEvent, EventSummary
 from app.intelligence.schemas import (
     EventCreate, EventUpdate, EventResponse, EventDetailResponse,
@@ -17,6 +17,7 @@ from app.intelligence.schemas import (
     EventSummaryResponse, EventSummaryData, EventChatRequest, EventChatResponse
 )
 from app.intelligence.summarizer import generate_major_summary
+from app import summarizer as chat_summarizer
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +186,9 @@ async def get_event(
     
     summary_data = None
     if latest_summary:
-        summary_data = EventSummaryData(**latest_summary.summary_json)
+        summary_json = latest_summary.summary_json.copy() if latest_summary.summary_json else {}
+        summary_json["article_ids"] = latest_summary.article_ids or []
+        summary_data = EventSummaryData(**summary_json)
     
     return EventDetailResponse(
         id=event.id,
@@ -402,6 +405,7 @@ async def generate_event_summary(
     ).order_by(desc(EventSummary.generated_at)).first()
     
     prior_json = prior_summary.summary_json if prior_summary else None
+    prior_article_ids = prior_summary.article_ids if prior_summary else []
     
     major_summary_prompt = settings_database.get_setting(
         db, "major_summary_prompt", app_config.DEFAULT_MAJOR_SUMMARY_PROMPT
@@ -420,9 +424,13 @@ async def generate_event_summary(
         logger.error(f"Error generating major summary: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to generate summary: {str(e)}")
     
+    article_ids_used = [a["id"] for a in articles_data]
+    summary_json["article_ids"] = article_ids_used
+    
     new_summary = EventSummary(
         event_id=event_id,
         summary_json=summary_json,
+        article_ids=article_ids_used,
         article_count=len(articles_data)
     )
     db.add(new_summary)
@@ -439,6 +447,7 @@ async def generate_event_summary(
         id=new_summary.id,
         event_id=new_summary.event_id,
         summary_json=EventSummaryData(**new_summary.summary_json),
+        article_ids=new_summary.article_ids or [],
         generated_at=new_summary.generated_at,
         article_count=new_summary.article_count
     )
@@ -463,15 +472,115 @@ async def get_event_summary(
         id=latest_summary.id,
         event_id=latest_summary.event_id,
         summary_json=EventSummaryData(**latest_summary.summary_json),
+        article_ids=latest_summary.article_ids or [],
         generated_at=latest_summary.generated_at,
         article_count=latest_summary.article_count
+    )
+
+
+@router.post("/{event_id}/summary/update", response_model=EventSummaryResponse)
+async def update_event_summary(
+    event_id: int,
+    request: Request,
+    current_user: database.User = Depends(get_current_user),
+    db: SQLAlchemySession = Depends(database.get_db)
+):
+    event = get_event_or_404(db, event_id, current_user.id)
+    
+    prior_summary = db.query(EventSummary).filter(
+        EventSummary.event_id == event_id
+    ).order_by(desc(EventSummary.generated_at)).first()
+    
+    if not prior_summary:
+        raise HTTPException(status_code=400, detail="No existing summary to update. Use regenerate instead.")
+    
+    prior_article_ids = set(prior_summary.article_ids or [])
+    prior_json = prior_summary.summary_json
+    
+    article_events = (
+        db.query(ArticleEvent, database.Article)
+        .join(database.Article, ArticleEvent.article_id == database.Article.id)
+        .filter(ArticleEvent.event_id == event_id)
+        .order_by(desc(database.Article.published_date))
+        .all()
+    )
+    
+    if not article_events:
+        raise HTTPException(status_code=400, detail="No articles in event")
+    
+    articles_data = []
+    new_articles = []
+    for ae, article in article_events:
+        article_dict = {
+            "id": article.id,
+            "title": article.title,
+            "publisher_name": article.publisher_name,
+            "published_date": article.published_date.isoformat() if article.published_date else None,
+            "url": article.url,
+            "word_count": article.word_count,
+            "scraped_text_content": article.scraped_text_content,
+            "rss_description": article.rss_description
+        }
+        articles_data.append(article_dict)
+        if article.id not in prior_article_ids:
+            new_articles.append(article_dict)
+    
+    major_summary_prompt = settings_database.get_setting(
+        db, "major_summary_prompt", app_config.DEFAULT_MAJOR_SUMMARY_PROMPT
+    )
+    
+    try:
+        llm = get_llm_summary(request)
+        
+        if new_articles:
+            summary_json = await generate_major_summary(
+                event_name=event.name,
+                articles=articles_data,
+                prompt_template=major_summary_prompt,
+                prior_summary_json=prior_json,
+                llm=llm
+            )
+        else:
+            summary_json = prior_json.copy() if prior_json else prior_json
+            summary_json["progressive_summary"] = "(No new articles since last summary)"
+    except Exception as e:
+        logger.error(f"Error generating major summary update: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate summary: {str(e)}")
+    
+    article_ids_used = [a["id"] for a in articles_data]
+    summary_json["article_ids"] = article_ids_used
+    
+    new_summary = EventSummary(
+        event_id=event_id,
+        summary_json=summary_json,
+        article_ids=article_ids_used,
+        article_count=len(articles_data)
+    )
+    db.add(new_summary)
+    
+    try:
+        db.commit()
+        db.refresh(new_summary)
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error saving event summary update: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to save summary")
+    
+    return EventSummaryResponse(
+        id=new_summary.id,
+        event_id=new_summary.event_id,
+        summary_json=EventSummaryData(**new_summary.summary_json),
+        article_ids=new_summary.article_ids or [],
+        generated_at=new_summary.generated_at,
+        article_count=new_summary.article_count
     )
 
 
 @router.post("/{event_id}/chat", response_model=EventChatResponse)
 async def chat_about_event(
     event_id: int,
-    request: EventChatRequest,
+    chat_request: EventChatRequest,
+    http_request: Request,
     current_user: database.User = Depends(get_current_user),
     db: SQLAlchemySession = Depends(database.get_db)
 ):
@@ -506,27 +615,14 @@ async def chat_about_event(
         for a in articles_data
     ])
     
-    chat_history_text = ""
-    if request.chat_history:
-        for msg in request.chat_history[-6:]:
-            role = "User" if msg.get("role") == "user" else "Assistant"
-            chat_history_text += f"\n{role}: {msg.get('content', '')}"
-    
-    full_prompt = f"""You are answering questions about the event: {event.name}
-
-{chat_history_text}
-
-User's question: {request.question}
-
-Here are the articles related to this event:
-{articles_context}
-
-Please answer the user's question based on the articles above. Be specific and reference the sources when relevant.
-"""
-    
-    from app.routers.chat_routes import get_chat_response
     try:
-        answer = await get_chat_response(full_prompt, None, None)
+        llm_chat = get_llm_chat(http_request)
+        answer = await chat_summarizer.get_chat_response(
+            llm_instance=llm_chat,
+            article_text=articles_context,
+            question=chat_request.question,
+            chat_history=chat_request.chat_history
+        )
     except Exception as e:
         logger.error(f"Error getting chat response for event: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to generate response")

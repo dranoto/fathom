@@ -17,7 +17,8 @@ def build_major_summary_prompt(
     prior_summary_json: Optional[Dict[str, Any]] = None
 ) -> str:
     if prior_summary_json:
-        prompt_template = prompt_template + "\n\nAlso consider this previous summary for the progressive_summary section:\n" + json.dumps(prior_summary_json, indent=2)
+        prior_json_escaped = json.dumps(prior_summary_json, indent=2).replace('{', '{{').replace('}', '}}')
+        prompt_template = prompt_template + "\n\nAlso consider this previous summary for the progressive_summary section:\n" + prior_json_escaped
     
     return prompt_template.format(
         event_name=event_name,
@@ -39,7 +40,25 @@ def parse_major_summary_response(response_content: str) -> Dict[str, Any]:
         
         return json.loads(response_content)
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse major summary JSON: {e}. Content: {response_content[:500]}")
+        logger.warning(f"Initial JSON parse failed, attempting to extract valid JSON: {e}")
+        
+        start_idx = response_content.find('{')
+        if start_idx == -1:
+            start_idx = response_content.find('[')
+        
+        if start_idx != -1:
+            potential_json = response_content[start_idx:]
+            
+            for end_offset in range(len(potential_json), 0, -1):
+                try:
+                    result = json.loads(potential_json[:end_offset])
+                    if isinstance(result, dict) and all(k in result for k in ["timeline_narrative", "cross_source_synthesis", "progressive_summary"]):
+                        logger.info(f"Successfully extracted partial JSON with {end_offset} chars")
+                        return result
+                except json.JSONDecodeError:
+                    continue
+        
+        logger.error(f"Failed to parse major summary JSON. Content: {response_content[:500]}")
         raise ValueError(f"Failed to parse summary response as JSON: {e}")
 
 
@@ -53,8 +72,8 @@ async def generate_major_summary(
     if not llm:
         raise RuntimeError("Summary LLM not available")
     
-    article_texts_parts = []
     seen_urls = set()
+    article_texts_parts = []
     
     for article in articles:
         url = article.get("url", "Unknown URL")
@@ -65,16 +84,16 @@ async def generate_major_summary(
         title = article.get("title", "Untitled")
         publisher = article.get("publisher_name", "Unknown Source")
         published_date = article.get("published_date", "Unknown Date")
-        content = article.get("scraped_text_content", article.get("rss_description", "No content available"))
+        content = article.get("scraped_text_content", article.get("rss_description", ""))
         
         if content:
-            excerpt = content[:2000] + "..." if len(content) > 2000 else content
+            article_texts_parts.append(
+                f"--- Article ---\nTitle: {title}\nSource: {publisher} ({published_date})\nURL: {url}\nContent: {content}\n"
+            )
         else:
-            excerpt = "No content available"
-        
-        article_texts_parts.append(
-            f"--- Article ---\nTitle: {title}\nSource: {publisher} ({published_date})\nURL: {url}\nContent: {excerpt}\n"
-        )
+            article_texts_parts.append(
+                f"--- Article ---\nTitle: {title}\nSource: {publisher} ({published_date})\nURL: {url}\nContent: No content available.\n"
+            )
     
     article_texts = "\n".join(article_texts_parts)
     
@@ -91,6 +110,9 @@ async def generate_major_summary(
         
         return summary_data
         
+    except (ValueError, json.JSONDecodeError) as e:
+        logger.error(f"Error generating major summary for event '{event_name}': {e}", exc_info=True)
+        raise
     except Exception as e:
         logger.error(f"Error generating major summary for event '{event_name}': {e}", exc_info=True)
         raise

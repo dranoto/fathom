@@ -52,6 +52,12 @@ export async function generateEventSummary(eventId) {
     });
 }
 
+export async function updateEventSummary(eventId) {
+    return fetchWithAuth(`/api/events/${eventId}/summary/update`, {
+        method: 'POST'
+    });
+}
+
 export async function getEventSummary(eventId) {
     return fetchWithAuth(`/api/events/${eventId}/summary`);
 }
