@@ -284,6 +284,7 @@ async def get_news_summaries_endpoint(
             database.article_tag_association.c.user_id == current_user.id,
             database.article_tag_association.c.article_id.in_(article_ids_on_page)
         ).all()
+        logger.info(f"API: User {current_user.id} tag query for articles {article_ids_on_page}: found {len(tag_rows)} tag rows")
         for tag_id, tag_name, art_id in tag_rows:
             if art_id not in article_tags_map:
                 article_tags_map[art_id] = []
@@ -629,6 +630,8 @@ async def regenerate_article_summary(
         
         tag_names_generated = await summarizer.generate_tags_for_text(current_text_content, llm_tag, settings_database.get_setting(settings_db, "tag_prompt", app_config.DEFAULT_TAG_GENERATION_PROMPT))
         
+        logger.info(f"API Regenerate: Generated tag names: {tag_names_generated}")
+        
         if tag_names_generated:
             processed_tags = tag_utils.process_ai_tags_with_fuzzy_matching(tag_names_generated, existing_normalized_names)
             
@@ -677,6 +680,24 @@ async def regenerate_article_summary(
         db.rollback()
         logger.error(f"API Regenerate: Error committing changes for Article ID {article_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="A database error occurred while saving changes.")
+    
+    article_tags_map = {}
+    tag_rows = db.query(
+        database.Tag.id,
+        database.Tag.name,
+        database.article_tag_association.c.article_id
+    ).join(
+        database.article_tag_association,
+        database.Tag.id == database.article_tag_association.c.tag_id
+    ).filter(
+        database.article_tag_association.c.user_id == current_user.id,
+        database.article_tag_association.c.article_id == article_id
+    ).all()
+    for tag_id, tag_name, art_id in tag_rows:
+        if art_id not in article_tags_map:
+            article_tags_map[art_id] = []
+        article_tags_map[art_id].append(ArticleTagResponse(id=tag_id, name=tag_name))
+    logger.info(f"API Regenerate: Fetched tags for article {article_id}: {article_tags_map.get(article_id, [])}")
 
     return article_helpers._create_article_result(
         article_db_obj=article_db,
@@ -684,7 +705,8 @@ async def regenerate_article_summary(
         min_word_count_threshold=min_word_count_threshold,
         user_id=current_user.id,
         summary_text=new_summary_text,
-        error_message=None if not new_summary_text or not new_summary_text.startswith("Error:") else new_summary_text
+        error_message=None if not new_summary_text or not new_summary_text.startswith("Error:") else new_summary_text,
+        article_tags_map=article_tags_map
     )
 
 

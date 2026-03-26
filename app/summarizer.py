@@ -164,10 +164,30 @@ async def generate_tags_for_text(
         logger.info(f"Attempting to generate tags with prompt (first 150 chars): \"{formatted_prompt[:150]}...\"")
         
         response_obj = await llm_instance.ainvoke(formatted_prompt)
+        logger.info(f"Tag LLM response type: {type(response_obj)}, response: {response_obj}")
         raw_content = response_obj.content if hasattr(response_obj, 'content') else str(response_obj)
-        if isinstance(raw_content, list):
-            raw_content = ' '.join(str(c) for c in raw_content)
+        logger.info(f"Tag LLM raw_content: '{raw_content}'")
+        
         tags_string = raw_content.strip() if isinstance(raw_content, str) else str(raw_content)
+        
+        if tags_string.startswith('Tags:') or tags_string.startswith('**Tags**'):
+            tags_string = tags_string.split(':', 1)[1].strip()
+        
+        import re
+        json_match = re.search(r'\[.*\]', tags_string, re.DOTALL)
+        if json_match:
+            try:
+                import json
+                tags_list = json.loads(json_match.group())
+                if isinstance(tags_list, list):
+                    tags_list = [t.strip() for t in tags_list if t.strip()]
+                    logger.info(f"Successfully parsed JSON tags: {tags_list}")
+                    return tags_list
+            except:
+                pass
+        
+        if isinstance(raw_content, list):
+            tags_string = ' '.join(str(c) for c in raw_content)
 
         if not tags_string:
             logger.warning("Empty tag string received from LLM.")

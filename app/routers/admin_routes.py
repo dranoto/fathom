@@ -240,7 +240,12 @@ async def get_global_settings(
     
     def get_int(db, key, default):
         val = settings_database.get_setting(db, key, str(default))
-        return int(val) if val else default
+        try:
+            if val and val.lower() not in ('none', ''):
+                return int(val)
+            return default
+        except (ValueError, TypeError):
+            return default
     
     with settings_database.db_session_scope() as settings_db:
         return GlobalSettingsResponse(

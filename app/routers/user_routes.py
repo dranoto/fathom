@@ -181,7 +181,7 @@ async def add_user_feed(
                 feed_name = str(request.url)
         
         feed_source = database.FeedSource(
-            url=request.url,
+            url=str(request.url),
             name=feed_name
         )
         db.add(feed_source)

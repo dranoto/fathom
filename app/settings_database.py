@@ -118,9 +118,10 @@ def set_multiple_settings(db: SQLAlchemySession, settings_to_update: Dict[str, A
     Updates multiple settings in the database from a dictionary.
     """
     for key, value in settings_to_update.items():
-        # Ensure value is a string before setting
-        str_value = str(value)
-        set_setting(db, key, str_value)
+        if value is None:
+            set_setting(db, key, "")
+        else:
+            set_setting(db, key, str(value))
 
 def get_cached_models(db: SQLAlchemySession) -> List[str]:
     """
