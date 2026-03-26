@@ -175,6 +175,18 @@ async def manual_trigger_rss_refresh(
         raise HTTPException(status_code=500, detail="Could not schedule RSS refresh.")
 
 
+@router.get("/feeds/refresh-status", response_model=RefreshStatusResponse)
+async def get_rss_refresh_status(
+    admin_user: database.User = Depends(require_admin)
+):
+    """
+    Checks if an RSS feed refresh task is currently in progress. Admin only.
+    """
+    logger.info("API Call: Checking RSS refresh status.")
+    is_locked = tasks.is_rss_update_locked()
+    return {"is_refreshing": is_locked}
+
+
 @router.post("/feeds/{feed_id}/refresh", status_code=202)
 async def refresh_single_feed(
     feed_id: int,
@@ -200,15 +212,3 @@ async def refresh_single_feed(
     except Exception as e:
         logger.error(f"Error scheduling single feed RSS refresh for feed ID {feed_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Could not schedule RSS refresh.")
-
-
-@router.get("/feeds/refresh-status", response_model=RefreshStatusResponse)
-async def get_rss_refresh_status(
-    admin_user: database.User = Depends(require_admin)
-):
-    """
-    Checks if an RSS feed refresh task is currently in progress. Admin only.
-    """
-    logger.info("API Call: Checking RSS refresh status.")
-    is_locked = tasks.is_rss_update_locked()
-    return {"is_refreshing": is_locked}

@@ -5,6 +5,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session as SQLAlchemySession
+from sqlalchemy import func as sql_func
 from pydantic import BaseModel, HttpUrl
 
 from .. import database
@@ -76,33 +77,52 @@ async def get_public_feeds(
     """
     logger.info(f"API: Fetching public feeds for user {current_user.id}")
     
-    user_subs_feed_ids = {s.feed_source_id for s in db.query(database.UserFeedSubscription.feed_source_id).filter(
-        database.UserFeedSubscription.user_id == current_user.id
-    ).all()}
-    
-    first_adder_subq = db.query(
-        database.UserFeedSubscription.feed_source_id,
-        database.UserFeedSubscription.user_id
-    ).distinct(database.UserFeedSubscription.feed_source_id).subquery()
-    
-    first_adders = db.query(
-        first_adder_subq.c.feed_source_id,
-        first_adder_subq.c.user_id
-    ).all()
-    
-    unique_feeds = []
-    for fa in first_adders:
-        if fa.feed_source_id not in user_subs_feed_ids:
-            feed_source = db.query(database.FeedSource).filter(database.FeedSource.id == fa.feed_source_id).first()
-            if feed_source:
-                unique_feeds.append(PublicFeedResponse(
-                    feed_source_id=fa.feed_source_id,
-                    url=feed_source.url,
-                    name=feed_source.name,
-                    added_by_user_id=fa.user_id
-                ))
-    
-    return unique_feeds
+    try:
+        user_subs_feed_ids = {s.feed_source_id for s in db.query(database.UserFeedSubscription.feed_source_id).filter(
+            database.UserFeedSubscription.user_id == current_user.id
+        ).all()}
+        
+        logger.debug(f"API: User {current_user.id} already subscribed to feed_ids: {user_subs_feed_ids}")
+        
+        first_adder_subq = db.query(
+            database.UserFeedSubscription.feed_source_id,
+            sql_func.min(database.UserFeedSubscription.id).label('first_sub_id')
+        ).group_by(database.UserFeedSubscription.feed_source_id).subquery()
+        
+        first_adders = db.query(
+            database.UserFeedSubscription.feed_source_id,
+            database.UserFeedSubscription.user_id
+        ).join(
+            first_adder_subq,
+            database.UserFeedSubscription.feed_source_id == first_adder_subq.c.feed_source_id
+        ).filter(
+            database.UserFeedSubscription.id == first_adder_subq.c.first_sub_id
+        ).all()
+        
+        logger.debug(f"API: Found {len(first_adders)} unique feeds added by other users")
+        
+        unique_feeds = []
+        seen_feed_ids = set()
+        for fa in first_adders:
+            if fa.feed_source_id in seen_feed_ids:
+                logger.warning(f"API: Duplicate feed_source_id {fa.feed_source_id} found in first_adders query")
+                continue
+            if fa.feed_source_id not in user_subs_feed_ids:
+                feed_source = db.query(database.FeedSource).filter(database.FeedSource.id == fa.feed_source_id).first()
+                if feed_source:
+                    unique_feeds.append(PublicFeedResponse(
+                        feed_source_id=fa.feed_source_id,
+                        url=feed_source.url,
+                        name=feed_source.name,
+                        added_by_user_id=fa.user_id
+                    ))
+                    seen_feed_ids.add(fa.feed_source_id)
+        
+        logger.info(f"API: Returning {len(unique_feeds)} public feeds for user {current_user.id}")
+        return unique_feeds
+    except Exception as e:
+        logger.error(f"API: Error in get_public_feeds for user {current_user.id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error fetching public feeds: {str(e)}")
 
 
 @router.get("/users/feeds", response_model=List[UserFeedResponse])
@@ -149,25 +169,30 @@ async def add_user_feed(
     logger.info(f"API: User {current_user.id} adding feed: {request.url}")
     
     feed_source = db.query(database.FeedSource).filter(
-        database.FeedSource.url == request.url
+        database.FeedSource.url == str(request.url)
     ).first()
     
     if not feed_source:
         feed_name = request.custom_name
         if not feed_name:
             try:
-                feed_name = request.url.split('/')[2].replace("www.", "")
-            except IndexError:
-                feed_name = request.url
+                feed_name = str(request.url).split('/')[2].replace("www.", "")
+            except (IndexError, AttributeError):
+                feed_name = str(request.url)
         
         feed_source = database.FeedSource(
             url=request.url,
             name=feed_name
         )
         db.add(feed_source)
-        db.commit()
-        db.refresh(feed_source)
-        logger.info(f"API: Created new FeedSource for URL: {request.url}")
+        try:
+            db.commit()
+            db.refresh(feed_source)
+            logger.info(f"API: Created new FeedSource for URL: {request.url}, id: {feed_source.id}")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"API: Error creating FeedSource for {request.url}: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Could not create feed source. Please try again.")
     
     existing = db.query(database.UserFeedSubscription).filter(
         database.UserFeedSubscription.user_id == current_user.id,
@@ -180,16 +205,29 @@ async def add_user_feed(
     new_sub = database.UserFeedSubscription(
         user_id=current_user.id,
         feed_source_id=feed_source.id,
-        custom_name=request.custom_name,
-        subscribed_at=datetime.now(timezone.utc)
+        custom_name=request.custom_name
     )
     db.add(new_sub)
-    db.commit()
+    try:
+        db.commit()
+        logger.info(f"API: Committed new subscription for user {current_user.id}, feed_source_id: {feed_source.id}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"API: Error during commit for user {current_user.id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Could not commit subscription: {str(e)}")
     
-    logger.info(f"API: Feed subscribed for user {current_user.id}: {request.url}")
+    try:
+        db.refresh(new_sub)
+        logger.info(f"API: Refreshed new_sub with id: {new_sub.id}, subscribed_at: {new_sub.subscribed_at}")
+    except Exception as e:
+        logger.error(f"API: Error during refresh for user {current_user.id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Could not refresh subscription: {str(e)}")
     
-    background_tasks.add_task(tasks.trigger_rss_update_single_feed, feed_source.id)
-    logger.info(f"API: Triggered RSS scrape for new feed {feed_source.id}")
+    try:
+        background_tasks.add_task(tasks.trigger_rss_update_single_feed, feed_source.id)
+        logger.info(f"API: Queued background task for feed {feed_source.id}")
+    except Exception as e:
+        logger.error(f"API: Error queuing background task: {e}", exc_info=True)
     
     return UserFeedResponse(
         id=new_sub.id,

@@ -5,15 +5,15 @@ from datetime import datetime
 
 # --- Pydantic Models for Settings ---
 class AppSettings(BaseModel):
-    summary_model_name: str
-    chat_model_name: str
-    tag_model_name: str
-    articles_per_page: int
-    rss_fetch_interval_minutes: int
-    summary_prompt: str
-    chat_prompt: str
-    tag_generation_prompt: str
-    minimum_word_count: int
+    summary_model_name: Optional[str] = None
+    chat_model_name: Optional[str] = None
+    tag_model_name: Optional[str] = None
+    articles_per_page: Optional[int] = None
+    rss_fetch_interval_minutes: Optional[int] = None
+    summary_prompt: Optional[str] = None
+    chat_prompt: Optional[str] = None
+    tag_generation_prompt: Optional[str] = None
+    minimum_word_count: Optional[int] = None
 
 class InitialConfigResponse(BaseModel):
     settings: AppSettings
