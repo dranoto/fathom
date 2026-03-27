@@ -14,6 +14,7 @@
     padding: 15px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     overflow-y: auto;
+    max-height: 100%;
 }
 
 .intelligence-sidebar h3 {
@@ -81,14 +82,17 @@
     border-radius: 8px;
     padding: 20px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    overflow-y: visible;
+    overflow-y: auto;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .intelligence-event-header {
     margin-bottom: 20px;
     padding-bottom: 15px;
     border-bottom: 1px solid #eee;
+    flex-shrink: 0;
 }
 
 .intelligence-event-header h2 {
@@ -140,6 +144,8 @@
 
 .intelligence-timeline {
     margin-bottom: 25px;
+    overflow-y: auto;
+    max-height: 30vh;
 }
 
 .intelligence-timeline h3 {
@@ -198,6 +204,9 @@
 
 .intelligence-summary {
     margin-bottom: 25px;
+    overflow-y: auto;
+    max-height: 40vh;
+    flex-shrink: 0;
 }
 
 .intelligence-summary h3 {
@@ -245,6 +254,9 @@
 .intelligence-chat {
     border-top: 1px solid #eee;
     padding-top: 20px;
+    flex-shrink: 0;
+    max-height: 25vh;
+    overflow-y: auto;
 }
 
 .intelligence-chat .chat-header {
@@ -350,6 +362,7 @@
 .intelligence-articles-section {
     border-top: 1px solid #eee;
     margin-top: 20px;
+    flex-shrink: 0;
 }
 
 .articles-section-header {
