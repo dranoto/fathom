@@ -273,6 +273,10 @@ export async function regenerateSummary(articleId, payload) {
     });
 }
 
+export async function fetchArticle(articleId) {
+    return handleFetch(`${CHAT_API_ENDPOINT_BASE}/articles/${articleId}`);
+}
+
 export async function fetchChatHistory(articleId) {
     return handleFetch(`${CHAT_API_ENDPOINT_BASE}/article/${articleId}/chat-history`); 
 }

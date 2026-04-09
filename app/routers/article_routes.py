@@ -18,6 +18,7 @@ from .. import summarizer
 from .. import config as app_config
 from .. import security
 from .. import tag_utils
+from .. import summary_tasks
 from ..schemas import (
     PaginatedSummariesAPIResponse,
     NewsPageQuery,
@@ -438,6 +439,242 @@ async def get_news_summaries_endpoint(
     )
 
 
+@router.post("/{article_id}/regenerate-summary", response_model=ArticleResult)
+async def regenerate_article_summary(
+    article_id: int,
+    request_body: RegenerateSummaryRequest,
+    current_user: database.User = Depends(get_current_user),
+    db: SQLAlchemySession = Depends(database.get_db),
+    settings_db: SQLAlchemySession = Depends(settings_database.get_db),
+    llm_summary: ChatOpenAI = Depends(get_llm_summary),
+    llm_tag: ChatOpenAI = Depends(get_llm_tag)
+):
+    if not llm_summary:
+        raise HTTPException(status_code=503, detail="Summarization LLM not available.")
+
+    security.verify_article_access(db, article_id, current_user.id)
+    
+    article_db = db.query(database.Article).options(
+        joinedload(database.Article.tags),
+        joinedload(database.Article.feed_source)
+    ).filter(database.Article.id == article_id).first()
+    
+    if not article_db:
+        raise HTTPException(status_code=404, detail="Article not found")
+    
+    try:
+        min_word_count_threshold = int(settings_database.get_setting(
+            settings_db, "minimum_word_count", str(app_config.DEFAULT_MINIMUM_WORD_COUNT)
+        ))
+    except (ValueError, TypeError):
+        min_word_count_threshold = app_config.DEFAULT_MINIMUM_WORD_COUNT
+    
+    current_text_content = article_db.scraped_text_content
+    current_word_count = article_db.word_count
+    force_scrape_needed = (
+        not current_text_content or
+        current_text_content.startswith(SCRAPING_ERROR_PREFIX) or
+        current_text_content.startswith(CONTENT_ERROR_PREFIX) or
+        (current_word_count is not None and current_word_count < min_word_count_threshold) or
+        not article_db.full_html_content
+    )
+    
+    if force_scrape_needed:
+        logger.info(f"API Regenerate: Content for Article ID {article_id} requires re-scraping.")
+        scraped_docs_list_regen: List[LangchainDocument] = await scraper.scrape_urls([str(article_db.url)])
+        scraper_error_msg_regen = None
+        if scraped_docs_list_regen and scraped_docs_list_regen[0]:
+            sc_doc_regen = scraped_docs_list_regen[0]
+            scraper_error_msg_regen = sc_doc_regen.metadata.get("error")
+            if not scraper_error_msg_regen and sc_doc_regen.page_content:
+                article_db.scraped_text_content = sc_doc_regen.page_content
+                article_db.full_html_content = sc_doc_regen.metadata.get('full_html_content')
+                article_db.word_count = sc_doc_regen.metadata.get('word_count', 0)
+                current_text_content = article_db.scraped_text_content
+                current_word_count = article_db.word_count
+                db.add(article_db)
+                logger.info(f"API Regenerate: Successfully re-scraped content for Article ID {article_id}.")
+            else:
+                scraper_error_msg_regen = scraper_error_msg_regen or "Failed to re-scrape content (regen)"
+                article_db.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_regen}"
+                article_db.full_html_content = None
+                article_db.word_count = 0
+                current_text_content = article_db.scraped_text_content
+                db.add(article_db)
+                logger.error(f"API Regenerate: Failed to re-scrape for Article ID {article_id}: {scraper_error_msg_regen}")
+                raise HTTPException(status_code=500, detail="Failed to fetch article content. Please try again later.")
+        else:
+            scraper_error_msg_regen = "Failed to re-scrape: No document returned."
+            article_db.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_regen}"
+            article_db.full_html_content = None
+            article_db.word_count = 0
+            current_text_content = article_db.scraped_text_content
+            db.add(article_db)
+            logger.error(f"API Regenerate: Failed to re-scrape for Article ID {article_id}: {scraper_error_msg_regen}")
+            raise HTTPException(status_code=500, detail="Failed to fetch article content. Please try again later.")
+    
+    if not current_text_content or current_text_content.startswith(SCRAPING_ERROR_PREFIX) or (current_word_count is not None and current_word_count < min_word_count_threshold):
+        logger.error(f"API Regenerate: Article text content for ID {article_id} is still invalid or too short.")
+        return article_helpers._create_article_result(
+            article_db_obj=article_db,
+            db=db,
+            min_word_count_threshold=min_word_count_threshold,
+            user_id=current_user.id,
+            error_message=f"Cannot regenerate summary: article content is invalid or too short (word count: {current_word_count})."
+        )
+    
+    lc_doc_for_summary_regen = LangchainDocument(
+        page_content=current_text_content,
+        metadata={
+            "source": str(article_db.url),
+            "id": article_db.id,
+            "full_html_content": article_db.full_html_content,
+        }
+    )
+    prompt_to_use = request_body.custom_prompt if request_body.custom_prompt and request_body.custom_prompt.strip() else settings_database.get_setting(
+        settings_db, "summary_prompt", app_config.DEFAULT_SUMMARY_PROMPT
+    )
+    
+    await summary_tasks.SUMMARY_SEMAPHORE.acquire()
+    new_summary_text = None
+    try:
+        try:
+            new_summary_text = await summarizer.summarize_document_content(lc_doc_for_summary_regen, llm_summary, prompt_to_use)
+        except summarizer.SummarizationError as e:
+            logger.warning(f"API Regenerate: Summarization failed for Article ID {article_id}: {e}")
+            return article_helpers._create_article_result(
+                article_db_obj=article_db,
+                db=db,
+                min_word_count_threshold=min_word_count_threshold,
+                user_id=current_user.id,
+                error_message=str(e)
+            )
+    finally:
+        summary_tasks.SUMMARY_SEMAPHORE.release()
+    
+    tag_names_generated = None
+    if request_body.regenerate_tags and llm_tag and current_text_content and not current_text_content.startswith(SCRAPING_ERROR_PREFIX):
+        await summary_tasks.SUMMARY_SEMAPHORE.acquire()
+        try:
+            tag_names_generated = await summarizer.generate_tags_for_text(
+                current_text_content, llm_tag,
+                settings_database.get_setting(settings_db, "tag_prompt", app_config.DEFAULT_TAG_GENERATION_PROMPT)
+            )
+        finally:
+            summary_tasks.SUMMARY_SEMAPHORE.release()
+    
+    await summary_tasks.DB_LOCK.acquire()
+    try:
+        try:
+            db.query(database.Summary).filter(
+                database.Summary.user_id == current_user.id,
+                database.Summary.article_id == article_id
+            ).delete(synchronize_session=False)
+            
+            model_name = settings_database.get_setting(settings_db, "summary_model_name", app_config.DEFAULT_SUMMARY_MODEL_NAME)
+            new_summary_db_obj = database.Summary(
+                user_id=current_user.id,
+                article_id=article_id,
+                summary_text=new_summary_text,
+                prompt_used=prompt_to_use,
+                model_used=model_name
+            )
+            db.add(new_summary_db_obj)
+            
+            if tag_names_generated:
+                logger.info(f"API Regenerate: Regenerating tags for user {current_user.id}, Article ID {article_id}")
+                db.execute(
+                    database.article_tag_association.delete().where(
+                        database.article_tag_association.c.user_id == current_user.id,
+                        database.article_tag_association.c.article_id == article_id
+                    )
+                )
+                
+                existing_tags = db.query(database.Tag).filter(
+                    database.Tag.user_id == current_user.id
+                ).all()
+                existing_normalized_names = [t.normalized_name or tag_utils.normalize_tag_name(t.name) for t in existing_tags]
+                
+                logger.info(f"API Regenerate: Generated tag names: {tag_names_generated}")
+                
+                processed_tags = tag_utils.process_ai_tags_with_fuzzy_matching(tag_names_generated, existing_normalized_names)
+                
+                for tag_name_cleaned in processed_tags:
+                    if not tag_name_cleaned:
+                        continue
+                    tag_db_obj = db.query(database.Tag).filter(
+                        database.Tag.normalized_name == tag_name_cleaned,
+                        database.Tag.user_id == current_user.id
+                    ).first()
+                    if not tag_db_obj:
+                        try:
+                            original_tag = next((t for t in tag_names_generated if tag_utils.normalize_tag_name(t) == tag_name_cleaned), tag_name_cleaned)
+                            tag_db_obj = database.Tag(
+                                name=original_tag.strip().title() if original_tag else tag_name_cleaned,
+                                normalized_name=tag_name_cleaned,
+                                user_id=current_user.id
+                            )
+                            db.add(tag_db_obj)
+                            db.flush()
+                        except IntegrityError:
+                            db.rollback()
+                            tag_db_obj = db.query(database.Tag).filter(
+                                database.Tag.normalized_name == tag_name_cleaned,
+                                database.Tag.user_id == current_user.id
+                            ).first()
+                    if tag_db_obj:
+                        existing = db.query(database.article_tag_association).filter(
+                            database.article_tag_association.c.user_id == current_user.id,
+                            database.article_tag_association.c.article_id == article_id,
+                            database.article_tag_association.c.tag_id == tag_db_obj.id
+                        ).first()
+                        if not existing:
+                            stmt = database.article_tag_association.insert().values(
+                                user_id=current_user.id,
+                                article_id=article_id,
+                                tag_id=tag_db_obj.id
+                            )
+                            db.execute(stmt)
+            
+            db.commit()
+            db.refresh(article_db)
+            logger.info(f"API Regenerate: Successfully committed all changes for Article ID {article_id}.")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"API Regenerate: Error committing changes for Article ID {article_id}: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="A database error occurred while saving changes.")
+    finally:
+        summary_tasks.DB_LOCK.release()
+    
+    article_tags_map = {}
+    tag_rows = db.query(
+        database.Tag.id,
+        database.Tag.name,
+        database.article_tag_association.c.article_id
+    ).join(
+        database.article_tag_association,
+        database.Tag.id == database.article_tag_association.c.tag_id
+    ).filter(
+        database.article_tag_association.c.user_id == current_user.id,
+        database.article_tag_association.c.article_id == article_id
+    ).all()
+    for tag_id, tag_name, art_id in tag_rows:
+        if art_id not in article_tags_map:
+            article_tags_map[art_id] = []
+        article_tags_map[art_id].append(ArticleTagResponse(id=tag_id, name=tag_name))
+    logger.info(f"API Regenerate: Fetched tags for article {article_id}: {article_tags_map.get(article_id, [])}")
+    
+    return article_helpers._create_article_result(
+        article_db_obj=article_db,
+        db=db,
+        min_word_count_threshold=min_word_count_threshold,
+        user_id=current_user.id,
+        summary_text=new_summary_text,
+        error_message=None if not new_summary_text or not new_summary_text.startswith("Error:") else new_summary_text,
+        article_tags_map=article_tags_map
+    )
+
+
 @router.post("/{article_id}/favorite", response_model=ArticleResult)
 async def toggle_favorite_status(
     article_id: int,
@@ -495,218 +732,6 @@ async def toggle_favorite_status(
         min_word_count_threshold=min_word_count_threshold,
         user_id=current_user.id,
         user_favorite_ids=user_favorite_ids
-    )
-
-
-@router.post("/{article_id}/regenerate-summary", response_model=ArticleResult)
-async def regenerate_article_summary(
-    article_id: int,
-    request_body: RegenerateSummaryRequest,
-    current_user: database.User = Depends(get_current_user),
-    db: SQLAlchemySession = Depends(database.get_db),
-    settings_db: SQLAlchemySession = Depends(settings_database.get_db),
-    llm_summary: ChatOpenAI = Depends(get_llm_summary),
-    llm_tag: ChatOpenAI = Depends(get_llm_tag)
-):
-    if not llm_summary:
-        raise HTTPException(status_code=503, detail="Summarization LLM not available.")
-
-    try:
-        min_word_count_threshold = int(settings_database.get_setting(settings_db, "minimum_word_count", str(app_config.DEFAULT_MINIMUM_WORD_COUNT)))
-    except (ValueError, TypeError):
-        min_word_count_threshold = app_config.DEFAULT_MINIMUM_WORD_COUNT
-
-    security.verify_article_access(db, article_id, current_user.id)
-    article_db = db.query(database.Article).options(
-        joinedload(database.Article.tags),
-        joinedload(database.Article.feed_source)
-    ).filter(database.Article.id == article_id).first()
-    
-    logger.info(f"API Call: Regenerate summary for user {current_user.id}, Article ID {article_id}")
-    current_text_content = article_db.scraped_text_content
-    current_word_count = article_db.word_count
-    force_scrape_needed = (
-        not current_text_content or
-        current_text_content.startswith(SCRAPING_ERROR_PREFIX) or
-        current_text_content.startswith(CONTENT_ERROR_PREFIX) or
-        (current_word_count is not None and current_word_count < min_word_count_threshold) or
-        not article_db.full_html_content
-    )
-    
-    if force_scrape_needed:
-        logger.info(f"API Regenerate: Content for Article ID {article_id} requires re-scraping.")
-        scraped_docs_list_regen: List[LangchainDocument] = await scraper.scrape_urls([str(article_db.url)])
-        scraper_error_msg_regen = None
-        if scraped_docs_list_regen and scraped_docs_list_regen[0]:
-            sc_doc_regen = scraped_docs_list_regen[0]
-            scraper_error_msg_regen = sc_doc_regen.metadata.get("error")
-            if not scraper_error_msg_regen and sc_doc_regen.page_content:
-                article_db.scraped_text_content = sc_doc_regen.page_content
-                article_db.full_html_content = sc_doc_regen.metadata.get('full_html_content')
-                article_db.word_count = sc_doc_regen.metadata.get('word_count', 0)
-                current_text_content = article_db.scraped_text_content
-                current_word_count = article_db.word_count
-                db.add(article_db)
-                logger.info(f"API Regenerate: Successfully re-scraped content for Article ID {article_id}.")
-            else:
-                scraper_error_msg_regen = scraper_error_msg_regen or "Failed to re-scrape content (regen)"
-                article_db.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_regen}"
-                article_db.full_html_content = None
-                article_db.word_count = 0
-                current_text_content = article_db.scraped_text_content
-                db.add(article_db)
-                logger.error(f"API Regenerate: Failed to re-scrape for Article ID {article_id}: {scraper_error_msg_regen}")
-                raise HTTPException(status_code=500, detail="Failed to fetch article content. Please try again later.")
-        else:
-            scraper_error_msg_regen = "Failed to re-scrape: No document returned."
-            article_db.scraped_text_content = f"{SCRAPING_ERROR_PREFIX} {scraper_error_msg_regen}"
-            article_db.full_html_content = None
-            article_db.word_count = 0
-            current_text_content = article_db.scraped_text_content
-            db.add(article_db)
-            logger.error(f"API Regenerate: Failed to re-scrape for Article ID {article_id}: {scraper_error_msg_regen}")
-            raise HTTPException(status_code=500, detail="Failed to fetch article content. Please try again later.")
-
-    if not current_text_content or current_text_content.startswith(SCRAPING_ERROR_PREFIX) or (current_word_count is not None and current_word_count < min_word_count_threshold):
-        logger.error(f"API Regenerate: Article text content for ID {article_id} is still invalid or too short.")
-        return article_helpers._create_article_result(
-            article_db_obj=article_db,
-            db=db,
-            min_word_count_threshold=min_word_count_threshold,
-            user_id=current_user.id,
-            error_message=f"Cannot regenerate summary: article content is invalid or too short (word count: {current_word_count})."
-        )
-
-    lc_doc_for_summary_regen = LangchainDocument(
-        page_content=current_text_content,
-        metadata={
-            "source": str(article_db.url),
-            "id": article_db.id,
-            "full_html_content": article_db.full_html_content,
-        }
-    )
-    prompt_to_use = request_body.custom_prompt if request_body.custom_prompt and request_body.custom_prompt.strip() else settings_database.get_setting(settings_db, "summary_prompt", app_config.DEFAULT_SUMMARY_PROMPT)
-
-    try:
-        new_summary_text = await summarizer.summarize_document_content(lc_doc_for_summary_regen, llm_summary, prompt_to_use)
-    except summarizer.SummarizationError as e:
-        logger.warning(f"API Regenerate: Summarization failed for Article ID {article_id}: {e}")
-        return article_helpers._create_article_result(
-            article_db_obj=article_db,
-            db=db,
-            min_word_count_threshold=min_word_count_threshold,
-            user_id=current_user.id,
-            error_message=str(e)
-        )
-
-    db.query(database.Summary).filter(
-        database.Summary.user_id == current_user.id,
-        database.Summary.article_id == article_id
-    ).delete(synchronize_session=False)
-
-    model_name = settings_database.get_setting(settings_db, "summary_model_name", app_config.DEFAULT_SUMMARY_MODEL_NAME)
-    new_summary_db_obj = database.Summary(
-        user_id=current_user.id,
-        article_id=article_id,
-        summary_text=new_summary_text,
-        prompt_used=prompt_to_use,
-        model_used=model_name
-    )
-    db.add(new_summary_db_obj)
-
-    if request_body.regenerate_tags and llm_tag and current_text_content and not current_text_content.startswith(SCRAPING_ERROR_PREFIX):
-        logger.info(f"API Regenerate: Regenerating tags for user {current_user.id}, Article ID {article_id}")
-        db.execute(
-            database.article_tag_association.delete().where(
-                database.article_tag_association.c.user_id == current_user.id,
-                database.article_tag_association.c.article_id == article_id
-            )
-        )
-        
-        existing_tags = db.query(database.Tag).filter(
-            database.Tag.user_id == current_user.id
-        ).all()
-        existing_normalized_names = [t.normalized_name or tag_utils.normalize_tag_name(t.name) for t in existing_tags]
-        
-        tag_names_generated = await summarizer.generate_tags_for_text(current_text_content, llm_tag, settings_database.get_setting(settings_db, "tag_prompt", app_config.DEFAULT_TAG_GENERATION_PROMPT))
-        
-        logger.info(f"API Regenerate: Generated tag names: {tag_names_generated}")
-        
-        if tag_names_generated:
-            processed_tags = tag_utils.process_ai_tags_with_fuzzy_matching(tag_names_generated, existing_normalized_names)
-            
-            for tag_name_cleaned in processed_tags:
-                if not tag_name_cleaned:
-                    continue
-                tag_db_obj = db.query(database.Tag).filter(
-                    database.Tag.normalized_name == tag_name_cleaned,
-                    database.Tag.user_id == current_user.id
-                ).first()
-                if not tag_db_obj:
-                    try:
-                        original_tag = next((t for t in tag_names_generated if tag_utils.normalize_tag_name(t) == tag_name_cleaned), tag_name_cleaned)
-                        tag_db_obj = database.Tag(
-                            name=original_tag.strip().title() if original_tag else tag_name_cleaned,
-                            normalized_name=tag_name_cleaned,
-                            user_id=current_user.id
-                        )
-                        db.add(tag_db_obj)
-                        db.flush()
-                    except IntegrityError:
-                        db.rollback()
-                        tag_db_obj = db.query(database.Tag).filter(
-                            database.Tag.normalized_name == tag_name_cleaned,
-                            database.Tag.user_id == current_user.id
-                        ).first()
-                if tag_db_obj:
-                    existing = db.query(database.article_tag_association).filter(
-                        database.article_tag_association.c.user_id == current_user.id,
-                        database.article_tag_association.c.article_id == article_id,
-                        database.article_tag_association.c.tag_id == tag_db_obj.id
-                    ).first()
-                    if not existing:
-                        stmt = database.article_tag_association.insert().values(
-                            user_id=current_user.id,
-                            article_id=article_id,
-                            tag_id=tag_db_obj.id
-                        )
-                        db.execute(stmt)
-
-    try:
-        db.commit()
-        db.refresh(article_db)
-        logger.info(f"API Regenerate: Successfully committed all changes for Article ID {article_id}.")
-    except Exception as e:
-        db.rollback()
-        logger.error(f"API Regenerate: Error committing changes for Article ID {article_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="A database error occurred while saving changes.")
-    
-    article_tags_map = {}
-    tag_rows = db.query(
-        database.Tag.id,
-        database.Tag.name,
-        database.article_tag_association.c.article_id
-    ).join(
-        database.article_tag_association,
-        database.Tag.id == database.article_tag_association.c.tag_id
-    ).filter(
-        database.article_tag_association.c.user_id == current_user.id,
-        database.article_tag_association.c.article_id == article_id
-    ).all()
-    for tag_id, tag_name, art_id in tag_rows:
-        if art_id not in article_tags_map:
-            article_tags_map[art_id] = []
-        article_tags_map[art_id].append(ArticleTagResponse(id=tag_id, name=tag_name))
-    logger.info(f"API Regenerate: Fetched tags for article {article_id}: {article_tags_map.get(article_id, [])}")
-
-    return article_helpers._create_article_result(
-        article_db_obj=article_db,
-        db=db,
-        min_word_count_threshold=min_word_count_threshold,
-        user_id=current_user.id,
-        summary_text=new_summary_text,
-        error_message=None if not new_summary_text or not new_summary_text.startswith("Error:") else new_summary_text,
-        article_tags_map=article_tags_map
     )
 
 

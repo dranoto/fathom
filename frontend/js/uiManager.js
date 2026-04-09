@@ -381,7 +381,7 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
         const actionsRow = document.createElement('div');
         actionsRow.classList.add('card-actions-row');
 
-        // Regenerate Summary button
+        // Regenerate Summary button - only show if article already has a summary
         const regenButton = document.createElement('button');
         regenButton.classList.add('regenerate-summary-btn');
         regenButton.title = "Regenerate Summary";
@@ -390,7 +390,9 @@ export function displayArticleResults(articles, clearPrevious, onTagClickCallbac
                 onRegenerateClickCallback(article.id);
             }
         };
-        if (!article.is_summarizable) {
+        if (!article.summary) {
+            regenButton.style.display = 'none';
+        } else if (!article.is_summarizable) {
             regenButton.disabled = true;
             regenButton.title = "Not enough content to summarize";
         }

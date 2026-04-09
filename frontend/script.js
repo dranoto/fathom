@@ -450,8 +450,8 @@ async function summarizeArticle(articleId, customPrompt) {
     try {
         const updatedArticle = await apiService.regenerateSummary(articleId, { custom_prompt: customPrompt });
         uiManager.updateArticleCard(updatedArticle, handleArticleTagClick);
-        // Refresh Muuri item after card content changes (summary added/changed)
         uiManager.refreshMuuriItem(articleCardElement);
+        uiManager.showToast('Summary generated!', 'success');
     } catch (error) {
         console.error("MainScript: Error regenerating summary:", error);
         if (summaryElement) {
